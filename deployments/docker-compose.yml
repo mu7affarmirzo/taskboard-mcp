@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  bot:
+    build:
+      context: ../
+      dockerfile: deployments/Dockerfile
+    container_name: telegram-trello-bot
+    restart: unless-stopped
+    env_file: ../.env
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - bot-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-data:

@@ -1,0 +1,97 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - revive
+    - depguard
+
+linters-settings:
+  depguard:
+    rules:
+      # Domain layer: only stdlib + other domain packages
+      domain:
+        files:
+          - "internal/domain/**/*.go"
+          - "!**/*_test.go"
+        deny:
+          - pkg: "telegram-trello-bot/internal/usecase"
+            desc: "domain must not import usecase (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/usecase/port"
+            desc: "domain must not import usecase/port (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/usecase/dto"
+            desc: "domain must not import usecase/dto (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter"
+            desc: "domain must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/controller"
+            desc: "domain must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/presenter"
+            desc: "domain must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/gateway"
+            desc: "domain must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure"
+            desc: "domain must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/trello"
+            desc: "domain must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/claude"
+            desc: "domain must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/persistence"
+            desc: "domain must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/telegram"
+            desc: "domain must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/config"
+            desc: "domain must not import infrastructure (DEP-1)"
+
+      # Use case layer: only domain + stdlib
+      usecase:
+        files:
+          - "internal/usecase/**/*.go"
+          - "!internal/usecase/**/*_test.go"
+        deny:
+          - pkg: "telegram-trello-bot/internal/adapter"
+            desc: "usecase must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/controller"
+            desc: "usecase must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/presenter"
+            desc: "usecase must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/adapter/gateway"
+            desc: "usecase must not import adapter (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure"
+            desc: "usecase must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/trello"
+            desc: "usecase must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/claude"
+            desc: "usecase must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/persistence"
+            desc: "usecase must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/telegram"
+            desc: "usecase must not import infrastructure (DEP-1)"
+          - pkg: "telegram-trello-bot/internal/infrastructure/config"
+            desc: "usecase must not import infrastructure (DEP-1)"
+
+      # Infrastructure must not import usecase (except usecase/port)
+      infrastructure:
+        files:
+          - "internal/infrastructure/**/*.go"
+          - "!internal/infrastructure/**/*_test.go"
+        deny:
+          - pkg: "telegram-trello-bot/internal/usecase"
+            desc: "infrastructure must not import usecase (DEP-1), only usecase/port"
+          - pkg: "telegram-trello-bot/internal/usecase/dto"
+            desc: "infrastructure must not import usecase/dto (DEP-1)"
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
