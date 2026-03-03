@@ -1,4 +1,3 @@
-import React from 'react';
 import { CardPreview } from './CardPreview';
 import { useCardsList } from '../../hooks/useCards';
 import { LoadingSpinner } from '../common/LoadingSpinner';

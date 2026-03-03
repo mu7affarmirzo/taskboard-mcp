@@ -1,5 +1,3 @@
-import React from 'react';
-
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',

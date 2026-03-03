@@ -1,4 +1,3 @@
-import React from 'react';
 import type { Board } from '../../types/api';
 
 interface Props {
