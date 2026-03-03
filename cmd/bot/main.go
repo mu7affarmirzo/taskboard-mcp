@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,12 +16,14 @@ import (
 	"telegram-trello-bot/internal/infrastructure/claude"
 	"telegram-trello-bot/internal/infrastructure/config"
 	"telegram-trello-bot/internal/infrastructure/health"
+	"telegram-trello-bot/internal/infrastructure/miniapp"
 	"telegram-trello-bot/internal/infrastructure/persistence"
 	"telegram-trello-bot/internal/infrastructure/state"
 	"telegram-trello-bot/internal/infrastructure/telegram"
 	infraTrello "telegram-trello-bot/internal/infrastructure/trello"
 	"telegram-trello-bot/internal/usecase"
 	"telegram-trello-bot/pkg/httputil"
+	"telegram-trello-bot/web"
 )
 
 func main() {
@@ -94,13 +97,61 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Health check
+	// HTTP Server
 	port := cfg.Port
 	if port == "" {
 		port = "8080"
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", health.NewHealthHandler(db))
+
+	// Mini App (feature-flagged)
+	if cfg.MiniAppEnabled {
+		logger.Info("mini app enabled, wiring API routes")
+
+		initDataValidator := miniapp.NewTelegramInitDataValidator(cfg.TelegramToken)
+		sessionMgr := miniapp.NewJWTSessionManager(cfg.JWTSecret)
+
+		// Mini App use cases
+		authenticateUC := usecase.NewAuthenticateUseCase(initDataValidator, sessionMgr, userRepo)
+		getUserSettingsUC := usecase.NewGetUserSettingsUseCase(userRepo)
+		listLabelsUC := usecase.NewListLabelsUseCase(trelloGw, userRepo)
+		listMembersUC := usecase.NewListMembersUseCase(trelloGw, userRepo)
+		listCardsUC := usecase.NewListCardsUseCase(trelloGw, userRepo)
+		getCardUC := usecase.NewGetCardUseCase(trelloGw, userRepo)
+		createCardFormUC := usecase.NewCreateCardFormUseCase(trelloGw, userRepo, taskLogRepo)
+		updateCardUC := usecase.NewUpdateCardUseCase(trelloGw, userRepo)
+		deleteCardUC := usecase.NewDeleteCardUseCase(trelloGw, userRepo)
+		addCommentUC := usecase.NewAddCommentUseCase(trelloGw, userRepo)
+
+		// Mini App controllers
+		miniAppCtrl := controller.NewMiniAppController(
+			authenticateUC, getUserSettingsUC,
+			listBoardsUC, listListsUC, listLabelsUC,
+		)
+		cardCtrl := controller.NewMiniAppCardController(
+			listMembersUC, listCardsUC, getCardUC,
+			createCardFormUC, updateCardUC,
+		)
+		settingsCtrl := controller.NewMiniAppSettingsController(
+			deleteCardUC, addCommentUC,
+			selectBoardUC, selectListUC, connectTrelloUC,
+		)
+
+		// Embedded frontend
+		frontendFS, fsErr := fs.Sub(web.FrontendFS, "dist")
+		if fsErr != nil {
+			logger.Error("failed to load frontend", "error", fsErr)
+			os.Exit(1)
+		}
+
+		apiHandler := miniapp.NewAPIRouter(
+			miniAppCtrl, cardCtrl, settingsCtrl,
+			sessionMgr, logger, frontendFS,
+		)
+		mux.Handle("/", apiHandler)
+	}
+
 	healthServer := &http.Server{Addr: ":" + port, Handler: mux}
 	go func() {
 		logger.Info("health server started", "port", port)

@@ -2,10 +2,11 @@
         phase1-scaffold phase1-domain-test phase1-usecase-test \
         phase1-adapter-test phase1-infra-test phase1-wire-verify \
         phase1-test phase2-test phase3-test phase4-test \
-        phase-all-test verify-deps coverage deploy logs stop
+        phase-all-test verify-deps coverage deploy logs stop \
+        web-install web-build web-dev
 
 # ── Build & Run ──────────────────────────────────────────────
-build:
+build: web-build
 	go build -o bin/bot ./cmd/bot
 
 run:
@@ -116,6 +117,16 @@ logs:
 stop:
 	docker compose -f deployments/docker-compose.yml down
 
+# ── Web Frontend ────────────────────────────────────────────
+web-install:
+	cd web && npm ci
+
+web-build:
+	cd web && npm run build
+
+web-dev:
+	cd web && npm run dev
+
 # ── Cleanup ──────────────────────────────────────────────────
 clean:
-	rm -rf bin/ coverage.out coverage.html
+	rm -rf bin/ coverage.out coverage.html web/dist
