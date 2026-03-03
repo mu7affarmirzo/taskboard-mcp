@@ -31,3 +31,6 @@ Thumbs.db
 
 # Go
 vendor/
+
+# Built binaries
+/mcp

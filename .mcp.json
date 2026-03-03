@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "trello": {
+      "command": "go",
+      "args": ["run", "./cmd/mcp"],
+      "env": {
+        "TRELLO_API_KEY": "",
+        "TRELLO_TOKEN": "",
+        "TRELLO_BOARD_ID": ""
+      }
+    }
+  }
+}

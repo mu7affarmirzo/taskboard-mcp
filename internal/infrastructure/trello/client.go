@@ -124,6 +124,73 @@ func (c *Client) CreateCard(ctx context.Context, token string, req CreateCardReq
 	return &card, nil
 }
 
+func (c *Client) GetCard(ctx context.Context, token string, cardID string) (*CardDetailResponse, error) {
+	endpoint := fmt.Sprintf("%s/1/cards/%s?key=%s&token=%s&fields=id,name,desc,shortUrl,url,idList,due&members=true&member_fields=id,username,fullName",
+		c.baseURL, cardID, c.apiKey, token)
+	var card CardDetailResponse
+	if err := c.doGet(ctx, endpoint, &card); err != nil {
+		return nil, fmt.Errorf("get card: %w", err)
+	}
+	return &card, nil
+}
+
+func (c *Client) UpdateCard(ctx context.Context, token string, cardID string, req UpdateCardRequest) (*CardDetailResponse, error) {
+	body := url.Values{}
+	body.Set("key", c.apiKey)
+	body.Set("token", token)
+	if req.Name != nil {
+		body.Set("name", *req.Name)
+	}
+	if req.Desc != nil {
+		body.Set("desc", *req.Desc)
+	}
+	if req.IDList != nil {
+		body.Set("idList", *req.IDList)
+	}
+	if req.Due != nil {
+		body.Set("due", *req.Due)
+	}
+	if req.IDLabels != nil {
+		body.Set("idLabels", *req.IDLabels)
+	}
+	if req.IDMembers != nil {
+		body.Set("idMembers", *req.IDMembers)
+	}
+
+	var card CardDetailResponse
+	if err := c.doPut(ctx, fmt.Sprintf("%s/1/cards/%s", c.baseURL, cardID), body, &card); err != nil {
+		return nil, fmt.Errorf("update card: %w", err)
+	}
+	return &card, nil
+}
+
+func (c *Client) GetCards(ctx context.Context, token string, listID string) ([]CardDetailResponse, error) {
+	endpoint := fmt.Sprintf("%s/1/lists/%s/cards?key=%s&token=%s&fields=id,name,desc,shortUrl,url,idList,due&members=true&member_fields=id,username,fullName",
+		c.baseURL, listID, c.apiKey, token)
+	var cards []CardDetailResponse
+	if err := c.doGet(ctx, endpoint, &cards); err != nil {
+		return nil, fmt.Errorf("get cards: %w", err)
+	}
+	return cards, nil
+}
+
+func (c *Client) doPut(ctx context.Context, rawURL string, body url.Values, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "PUT", rawURL, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
 func (c *Client) doGet(ctx context.Context, rawURL string, target interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {

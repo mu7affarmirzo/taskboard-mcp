@@ -242,3 +242,118 @@ func TestCreateCardRequest_Fields(t *testing.T) {
 	assert.Equal(t, "top", req.Position)
 	assert.Len(t, req.LabelIDs, 2)
 }
+
+func TestClient_GetCard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/cards/c1")
+		card := CardDetailResponse{
+			ID:       "c1",
+			Name:     "Test card",
+			Desc:     "A description",
+			ShortURL: "https://trello.com/c/abc",
+			URL:      "https://trello.com/c/abc/1-test",
+			IDList:   "list-1",
+			Due:      "2025-04-01T00:00:00.000Z",
+			Labels:   []LabelResponse{{ID: "lb1", Name: "Bug", Color: "red"}},
+			Members:  []MemberResponse{{ID: "m1", Username: "john", FullName: "John Doe"}},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(card))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	card, err := client.GetCard(context.Background(), "token", "c1")
+	require.NoError(t, err)
+	assert.Equal(t, "c1", card.ID)
+	assert.Equal(t, "Test card", card.Name)
+	assert.Equal(t, "A description", card.Desc)
+	assert.Equal(t, "list-1", card.IDList)
+	assert.Len(t, card.Labels, 1)
+	assert.Len(t, card.Members, 1)
+}
+
+func TestClient_GetCard_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	_, err := client.GetCard(context.Background(), "token", "bad-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get card")
+}
+
+func TestClient_UpdateCard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "PUT", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/cards/c1")
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "Updated title", r.FormValue("name"))
+		assert.Equal(t, "list-2", r.FormValue("idList"))
+		card := CardDetailResponse{
+			ID:     "c1",
+			Name:   "Updated title",
+			IDList: "list-2",
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(card))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	name := "Updated title"
+	listID := "list-2"
+	card, err := client.UpdateCard(context.Background(), "token", "c1", UpdateCardRequest{
+		Name:   &name,
+		IDList: &listID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Updated title", card.Name)
+	assert.Equal(t, "list-2", card.IDList)
+}
+
+func TestClient_UpdateCard_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	name := "fail"
+	_, err := client.UpdateCard(context.Background(), "token", "c1", UpdateCardRequest{Name: &name})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "update card")
+}
+
+func TestClient_GetCards(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/lists/list-1/cards")
+		cards := []CardDetailResponse{
+			{ID: "c1", Name: "Card 1", IDList: "list-1"},
+			{ID: "c2", Name: "Card 2", IDList: "list-1"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(cards))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	cards, err := client.GetCards(context.Background(), "token", "list-1")
+	require.NoError(t, err)
+	assert.Len(t, cards, 2)
+	assert.Equal(t, "Card 1", cards[0].Name)
+	assert.Equal(t, "Card 2", cards[1].Name)
+}
+
+func TestClient_GetCards_EmptyList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode([]CardDetailResponse{}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	cards, err := client.GetCards(context.Background(), "token", "list-1")
+	require.NoError(t, err)
+	assert.Empty(t, cards)
+}
