@@ -189,6 +189,45 @@ func TestClient_CreateCard(t *testing.T) {
 	assert.Equal(t, "https://trello.com/c/abc", card.ShortURL)
 }
 
+func TestClient_GetMembers(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/1/boards/b1/members")
+		members := []MemberResponse{
+			{ID: "m1", Username: "john", FullName: "John Doe"},
+			{ID: "m2", Username: "jane", FullName: "Jane Smith"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(members))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	members, err := client.GetMembers(context.Background(), "token", "b1")
+	require.NoError(t, err)
+	assert.Len(t, members, 2)
+	assert.Equal(t, "john", members[0].Username)
+	assert.Equal(t, "John Doe", members[0].FullName)
+}
+
+func TestClient_CreateCard_WithMembers(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "m1,m2", r.FormValue("idMembers"))
+		card := CardResponse{ID: "c1", ShortURL: "https://trello.com/c/abc"}
+		require.NoError(t, json.NewEncoder(w).Encode(card))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	card, err := client.CreateCard(context.Background(), "token", CreateCardRequest{
+		Name:      "Test card",
+		ListID:    "list-1",
+		MemberIDs: []string{"m1", "m2"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "c1", card.ID)
+}
+
 func TestCreateCardRequest_Fields(t *testing.T) {
 	req := CreateCardRequest{
 		Name:        "Fix bug",

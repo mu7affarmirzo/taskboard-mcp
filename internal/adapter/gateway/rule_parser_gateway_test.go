@@ -134,6 +134,69 @@ func TestRuleParser_NoChecklist_SingleLine(t *testing.T) {
 	assert.Nil(t, task.Checklist())
 }
 
+func TestRuleParser_DueDate_InXDays(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Fix server due in 3 days")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Fix server", task.Title())
+	assert.NotNil(t, task.DueDate())
+}
+
+func TestRuleParser_DueDate_InXWeeks(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Review code due in 2 weeks")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Review code", task.Title())
+	assert.NotNil(t, task.DueDate())
+}
+
+func TestRuleParser_DueDate_NextWeek(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Plan sprint due next week")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Plan sprint", task.Title())
+	assert.NotNil(t, task.DueDate())
+}
+
+func TestRuleParser_DueDate_ByNextFriday(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Finish report by next friday")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Finish report", task.Title())
+	assert.NotNil(t, task.DueDate())
+}
+
+func TestRuleParser_Members(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Fix bug @john @jane")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Fix bug", task.Title())
+	assert.Equal(t, []string{"john", "jane"}, task.Members())
+}
+
+func TestRuleParser_Members_WithLabelsAndPriority(t *testing.T) {
+	parser := gateway.NewRuleParserGateway()
+
+	task, err := parser.Parse(context.Background(), "Fix login bug @john urgent #backend due tomorrow")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Fix login bug", task.Title())
+	assert.Equal(t, []string{"john"}, task.Members())
+	assert.Equal(t, valueobject.PriorityHigh, task.Priority())
+	assert.Equal(t, []string{"backend"}, task.Labels())
+	assert.NotNil(t, task.DueDate())
+}
+
 func TestRuleParser_EmptyMessage(t *testing.T) {
 	parser := gateway.NewRuleParserGateway()
 

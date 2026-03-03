@@ -76,6 +76,24 @@ func (m *MockUserRepo) Save(ctx context.Context, user *entity.User) error {
 	return m.Called(ctx, user).Error(0)
 }
 
+type MockMemberResolver struct{ mock.Mock }
+
+func (m *MockMemberResolver) GetMembers(ctx context.Context, token string, boardID string) ([]port.MemberInfo, error) {
+	args := m.Called(ctx, token, boardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.MemberInfo), args.Error(1)
+}
+
+func (m *MockMemberResolver) MatchMembers(ctx context.Context, token string, boardID string, names []string) ([]string, error) {
+	args := m.Called(ctx, token, boardID, names)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 type MockTaskLog struct{ mock.Mock }
 
 func (m *MockTaskLog) Log(ctx context.Context, entry port.TaskLogEntry) error {

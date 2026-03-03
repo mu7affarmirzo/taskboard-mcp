@@ -8,4 +8,5 @@ type CreateTaskOutput struct {
 	DueDate   *time.Time
 	Priority  string
 	Labels    []string
+	Members   []string
 }

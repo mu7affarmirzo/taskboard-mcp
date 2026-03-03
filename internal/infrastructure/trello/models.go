@@ -6,6 +6,7 @@ type CreateCardRequest struct {
 	ListID      string
 	Due         string
 	LabelIDs    []string
+	MemberIDs   []string
 	Position    string
 }
 
@@ -30,4 +31,10 @@ type LabelResponse struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
+}
+
+type MemberResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	FullName string `json:"fullName"`
 }

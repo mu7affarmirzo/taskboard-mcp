@@ -12,6 +12,7 @@ import (
 
 	"telegram-trello-bot/internal/adapter/controller"
 	"telegram-trello-bot/internal/adapter/presenter"
+	"telegram-trello-bot/internal/domain/domainerror"
 	"telegram-trello-bot/internal/domain/entity"
 	"telegram-trello-bot/internal/domain/valueobject"
 	"telegram-trello-bot/internal/infrastructure/state"
@@ -109,6 +110,23 @@ func (m *mockTaskLog) Log(ctx context.Context, entry port.TaskLogEntry) error {
 	return m.Called(ctx, entry).Error(0)
 }
 
+type mockMemberResolver struct{ mock.Mock }
+
+func (m *mockMemberResolver) GetMembers(ctx context.Context, token, boardID string) ([]port.MemberInfo, error) {
+	args := m.Called(ctx, token, boardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.MemberInfo), args.Error(1)
+}
+func (m *mockMemberResolver) MatchMembers(ctx context.Context, token, boardID string, names []string) ([]string, error) {
+	args := m.Called(ctx, token, boardID, names)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 // -- Setup --
 
 type routerFixture struct {
@@ -123,19 +141,22 @@ type routerFixture struct {
 func setupRouter() *routerFixture {
 	parser := new(mockParser)
 	board := new(mockBoard)
+	memberResolver := new(mockMemberResolver)
 	userRepo := new(mockUserRepo)
 	taskLog := new(mockTaskLog)
 	pending := state.NewPendingStore()
 
-	createTask := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	createTask := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 	parseTask := usecase.NewParseTaskUseCase(parser, userRepo)
-	confirmTask := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	confirmTask := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 	listBoards := usecase.NewListBoardsUseCase(board, userRepo)
 	listLists := usecase.NewListListsUseCase(board, userRepo)
 	selectBoard := usecase.NewSelectBoardUseCase(userRepo)
 	selectList := usecase.NewSelectListUseCase(userRepo)
+	registerUser := usecase.NewRegisterUserUseCase(userRepo, "test-api-key")
+	connectTrello := usecase.NewConnectTrelloUseCase(userRepo)
 
-	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, pending)
+	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending)
 	pres := presenter.NewTelegramPresenter()
 	logger := slog.Default()
 
@@ -187,15 +208,33 @@ func makeCallback(userID int64, chatID int64, data string) tgbotapi.Update {
 
 // -- Tests --
 
-func TestRouter_StartCommand(t *testing.T) {
+func TestRouter_StartCommand_NewUser(t *testing.T) {
 	f := setupRouter()
+	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).
+		Return(nil, domainerror.ErrUserNotFound)
+	f.userRepo.On("Save", mock.Anything, mock.Anything).Return(nil)
 	f.api.On("Send", mock.Anything).Return(nil)
 
 	f.router.Route(f.api, makeCommand(100, 200, "start"))
 
 	f.api.AssertCalled(t, "Send", mock.MatchedBy(func(c tgbotapi.Chattable) bool {
 		msg, ok := c.(tgbotapi.MessageConfig)
-		return ok && msg.Text == "Welcome! Send /help to get started."
+		return ok && assert.Contains(t, msg.Text, "Welcome") && assert.Contains(t, msg.Text, "authorize")
+	}))
+}
+
+func TestRouter_StartCommand_ExistingUser(t *testing.T) {
+	f := setupRouter()
+	user := entity.NewUser(valueobject.TelegramID(100))
+	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).
+		Return(user, nil)
+	f.api.On("Send", mock.Anything).Return(nil)
+
+	f.router.Route(f.api, makeCommand(100, 200, "start"))
+
+	f.api.AssertCalled(t, "Send", mock.MatchedBy(func(c tgbotapi.Chattable) bool {
+		msg, ok := c.(tgbotapi.MessageConfig)
+		return ok && assert.Contains(t, msg.Text, "Welcome back")
 	}))
 }
 

@@ -10,14 +10,16 @@ import (
 )
 
 type TelegramController struct {
-	createTask  *usecase.CreateTaskUseCase
-	parseTask   *usecase.ParseTaskUseCase
-	confirmTask *usecase.ConfirmTaskUseCase
-	listBoards  *usecase.ListBoardsUseCase
-	listLists   *usecase.ListListsUseCase
-	selectBoard *usecase.SelectBoardUseCase
-	selectList  *usecase.SelectListUseCase
-	pending     *state.PendingStore
+	createTask    *usecase.CreateTaskUseCase
+	parseTask     *usecase.ParseTaskUseCase
+	confirmTask   *usecase.ConfirmTaskUseCase
+	listBoards    *usecase.ListBoardsUseCase
+	listLists     *usecase.ListListsUseCase
+	selectBoard   *usecase.SelectBoardUseCase
+	selectList    *usecase.SelectListUseCase
+	registerUser  *usecase.RegisterUserUseCase
+	connectTrello *usecase.ConnectTrelloUseCase
+	pending       *state.PendingStore
 }
 
 func NewTelegramController(
@@ -28,18 +30,30 @@ func NewTelegramController(
 	listLists *usecase.ListListsUseCase,
 	selectBoard *usecase.SelectBoardUseCase,
 	selectList *usecase.SelectListUseCase,
+	registerUser *usecase.RegisterUserUseCase,
+	connectTrello *usecase.ConnectTrelloUseCase,
 	pending *state.PendingStore,
 ) *TelegramController {
 	return &TelegramController{
-		createTask:  createTask,
-		parseTask:   parseTask,
-		confirmTask: confirmTask,
-		listBoards:  listBoards,
-		listLists:   listLists,
-		selectBoard: selectBoard,
-		selectList:  selectList,
-		pending:     pending,
+		createTask:    createTask,
+		parseTask:     parseTask,
+		confirmTask:   confirmTask,
+		listBoards:    listBoards,
+		listLists:     listLists,
+		selectBoard:   selectBoard,
+		selectList:    selectList,
+		registerUser:  registerUser,
+		connectTrello: connectTrello,
+		pending:       pending,
 	}
+}
+
+func (c *TelegramController) HandleStart(ctx context.Context, telegramID int64) (*dto.RegisterUserOutput, error) {
+	return c.registerUser.Execute(ctx, dto.RegisterUserInput{TelegramID: telegramID})
+}
+
+func (c *TelegramController) HandleConnectTrello(ctx context.Context, telegramID int64, token string) (*dto.ConnectTrelloOutput, error) {
+	return c.connectTrello.Execute(ctx, dto.ConnectTrelloInput{TelegramID: telegramID, Token: token})
 }
 
 func (c *TelegramController) HandleMessage(ctx context.Context, telegramID int64, text string) (*dto.CreateTaskOutput, error) {
@@ -59,6 +73,7 @@ func (c *TelegramController) HandleParseTask(ctx context.Context, telegramID int
 		Priority:    output.Priority,
 		Labels:      output.Labels,
 		Checklist:   output.Checklist,
+		Members:     output.Members,
 		RawMessage:  text,
 	})
 
@@ -79,6 +94,7 @@ func (c *TelegramController) HandleConfirmTask(ctx context.Context, telegramID i
 		DueDate:     task.DueDate,
 		Priority:    task.Priority,
 		Labels:      task.Labels,
+		Members:     task.Members,
 	})
 }
 

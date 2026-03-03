@@ -30,7 +30,8 @@ Return ONLY valid JSON with these fields:
   "due_date": "string (optional, ISO 8601 date like 2025-03-07)",
   "priority": "string (low|medium|high, default medium)",
   "labels": ["string array (optional, extracted tags/categories)"],
-  "checklist": ["string array (optional, subtasks if mentioned)"]
+  "checklist": ["string array (optional, subtasks if mentioned)"],
+  "members": ["string array (optional, @mentioned usernames without the @ symbol)"]
 }
 
 Today's date is %s. Resolve relative dates like "tomorrow", "next Friday" relative to today.`
@@ -42,6 +43,7 @@ type parsedTaskJSON struct {
 	Priority    string   `json:"priority"`
 	Labels      []string `json:"labels"`
 	Checklist   []string `json:"checklist"`
+	Members     []string `json:"members"`
 }
 
 func (g *ClaudeParserGateway) Parse(ctx context.Context, rawMessage string) (*entity.Task, error) {
@@ -76,6 +78,9 @@ func (g *ClaudeParserGateway) Parse(ctx context.Context, rawMessage string) (*en
 	}
 	if len(parsed.Checklist) > 0 {
 		opts = append(opts, entity.WithChecklist(parsed.Checklist))
+	}
+	if len(parsed.Members) > 0 {
+		opts = append(opts, entity.WithMembers(parsed.Members))
 	}
 
 	return entity.NewTask(parsed.Title, opts...)

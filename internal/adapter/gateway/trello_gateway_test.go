@@ -19,8 +19,9 @@ func TestTrelloGateway_ImplementsTaskBoard(t *testing.T) {
 	client := trello.NewClient("test-key", nil)
 	gw := gateway.NewTrelloGateway(client)
 
-	// Compile-time check: TrelloGateway satisfies port.TaskBoard
+	// Compile-time check: TrelloGateway satisfies port.TaskBoard and port.MemberResolver
 	var _ port.TaskBoard = gw
+	var _ port.MemberResolver = gw
 }
 
 func TestTrelloGateway_MatchLabels_ExactMatch(t *testing.T) {
@@ -88,6 +89,95 @@ func TestTrelloGateway_MatchLabels_NoMatch(t *testing.T) {
 func TestTrelloGateway_MatchLabels_EmptyNames(t *testing.T) {
 	gw := gateway.NewTrelloGateway(trello.NewClient("key", nil))
 	ids, err := gw.MatchLabels(context.Background(), "token", "board-1", nil)
+
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+}
+
+func TestTrelloGateway_MatchMembers_ExactUsername(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		members := []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+			FullName string `json:"fullName"`
+		}{
+			{ID: "m1", Username: "john", FullName: "John Doe"},
+			{ID: "m2", Username: "jane", FullName: "Jane Smith"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(members))
+	}))
+	defer server.Close()
+
+	gw := gateway.NewTrelloGatewayWithURL(server.URL, "test-key")
+	ids, err := gw.MatchMembers(context.Background(), "token", "board-1", []string{"john"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"m1"}, ids)
+}
+
+func TestTrelloGateway_MatchMembers_FullNameMatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		members := []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+			FullName string `json:"fullName"`
+		}{
+			{ID: "m1", Username: "jdoe", FullName: "John Doe"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(members))
+	}))
+	defer server.Close()
+
+	gw := gateway.NewTrelloGatewayWithURL(server.URL, "test-key")
+	ids, err := gw.MatchMembers(context.Background(), "token", "board-1", []string{"john doe"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"m1"}, ids)
+}
+
+func TestTrelloGateway_MatchMembers_CaseInsensitive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		members := []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+			FullName string `json:"fullName"`
+		}{
+			{ID: "m1", Username: "John", FullName: "John Doe"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(members))
+	}))
+	defer server.Close()
+
+	gw := gateway.NewTrelloGatewayWithURL(server.URL, "test-key")
+	ids, err := gw.MatchMembers(context.Background(), "token", "board-1", []string{"JOHN"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"m1"}, ids)
+}
+
+func TestTrelloGateway_MatchMembers_NoMatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		members := []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+			FullName string `json:"fullName"`
+		}{
+			{ID: "m1", Username: "john", FullName: "John Doe"},
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(members))
+	}))
+	defer server.Close()
+
+	gw := gateway.NewTrelloGatewayWithURL(server.URL, "test-key")
+	ids, err := gw.MatchMembers(context.Background(), "token", "board-1", []string{"alice"})
+
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
+
+func TestTrelloGateway_MatchMembers_EmptyInput(t *testing.T) {
+	gw := gateway.NewTrelloGateway(trello.NewClient("key", nil))
+	ids, err := gw.MatchMembers(context.Background(), "token", "board-1", nil)
 
 	require.NoError(t, err)
 	assert.Nil(t, ids)

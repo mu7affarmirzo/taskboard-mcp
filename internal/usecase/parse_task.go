@@ -33,6 +33,9 @@ func (uc *ParseTaskUseCase) Execute(
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
 	}
+	if !user.HasTrelloToken() {
+		return nil, domainerror.ErrTrelloNotConnected
+	}
 	if !user.HasBoardConfigured() {
 		return nil, domainerror.ErrBoardNotSet
 	}
@@ -52,6 +55,7 @@ func (uc *ParseTaskUseCase) Execute(
 		Priority:    string(task.Priority()),
 		Labels:      task.Labels(),
 		Checklist:   task.Checklist(),
+		Members:     task.Members(),
 		BoardID:     user.DefaultBoard(),
 		ListID:      user.DefaultList(),
 	}, nil

@@ -29,6 +29,7 @@ type CreateCardParams struct {
 	Description string
 	DueDate     *string
 	LabelIDs    []string
+	MemberIDs   []string
 	Position    string
 }
 

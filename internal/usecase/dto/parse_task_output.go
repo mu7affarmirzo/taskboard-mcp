@@ -9,6 +9,7 @@ type ParseTaskOutput struct {
 	Priority    string
 	Labels      []string
 	Checklist   []string
+	Members     []string
 	BoardID     string
 	ListID      string
 }

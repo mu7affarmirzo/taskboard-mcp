@@ -51,6 +51,23 @@ func TestParseTask_HappyPath(t *testing.T) {
 	assert.Equal(t, "list-1", output.ListID)
 }
 
+func TestParseTask_TrelloNotConnected(t *testing.T) {
+	parser := new(MockParser)
+	userRepo := new(MockUserRepo)
+
+	uc := usecase.NewParseTaskUseCase(parser, userRepo)
+
+	user := entity.NewUser(valueobject.TelegramID(12345))
+	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
+
+	_, err := uc.Execute(context.Background(), dto.CreateTaskInput{
+		TelegramID: 12345, RawMessage: "task",
+	})
+
+	assert.ErrorIs(t, err, domainerror.ErrTrelloNotConnected)
+	parser.AssertNotCalled(t, "Parse")
+}
+
 func TestParseTask_BoardNotSet(t *testing.T) {
 	parser := new(MockParser)
 	userRepo := new(MockUserRepo)
@@ -58,6 +75,7 @@ func TestParseTask_BoardNotSet(t *testing.T) {
 	uc := usecase.NewParseTaskUseCase(parser, userRepo)
 
 	user := entity.NewUser(valueobject.TelegramID(12345))
+	user.SetTrelloToken("tok")
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
 
 	_, err := uc.Execute(context.Background(), dto.CreateTaskInput{

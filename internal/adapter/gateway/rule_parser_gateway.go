@@ -17,9 +17,10 @@ func NewRuleParserGateway() *RuleParserGateway {
 }
 
 var (
-	dueDateRegex  = regexp.MustCompile(`(?i)\b(?:due|by)\s+(\w+(?:\s+\d{1,2})?(?:,?\s*\d{4})?)`)
+	dueDateRegex  = regexp.MustCompile(`(?i)\b(?:due|by)\s+(in\s+\d+\s+\w+|next\s+\w+|\w+(?:\s+\d{1,2})?(?:,?\s*\d{4})?)`)
 	priorityRegex = regexp.MustCompile(`(?i)\b(urgent|high\s*priority|low\s*priority)\b`)
 	labelRegex    = regexp.MustCompile(`#(\w+)`)
+	memberRegex   = regexp.MustCompile(`@(\w+)`)
 )
 
 func (g *RuleParserGateway) Parse(_ context.Context, rawMessage string) (*entity.Task, error) {
@@ -54,6 +55,16 @@ func (g *RuleParserGateway) Parse(_ context.Context, rawMessage string) (*entity
 		}
 	}
 
+	// Extract members (@username)
+	memberMatches := memberRegex.FindAllStringSubmatch(text, -1)
+	if len(memberMatches) > 0 {
+		members := make([]string, len(memberMatches))
+		for i, m := range memberMatches {
+			members[i] = m[1]
+		}
+		opts = append(opts, entity.WithMembers(members))
+	}
+
 	// Extract labels
 	labelMatches := labelRegex.FindAllStringSubmatch(text, -1)
 	if len(labelMatches) > 0 {
@@ -75,6 +86,7 @@ func (g *RuleParserGateway) Parse(_ context.Context, rawMessage string) (*entity
 	title := text
 	title = dueDateRegex.ReplaceAllString(title, "")
 	title = priorityRegex.ReplaceAllString(title, "")
+	title = memberRegex.ReplaceAllString(title, "")
 	title = labelRegex.ReplaceAllString(title, "")
 	title = strings.TrimRight(strings.TrimSpace(strings.Join(strings.Fields(title), " ")), " ,.")
 

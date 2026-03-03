@@ -11,23 +11,26 @@ import (
 )
 
 type CreateTaskUseCase struct {
-	parser   port.TaskParser
-	board    port.TaskBoard
-	userRepo port.UserRepository
-	taskLog  port.TaskLogRepository
+	parser         port.TaskParser
+	board          port.TaskBoard
+	memberResolver port.MemberResolver
+	userRepo       port.UserRepository
+	taskLog        port.TaskLogRepository
 }
 
 func NewCreateTaskUseCase(
 	parser port.TaskParser,
 	board port.TaskBoard,
+	memberResolver port.MemberResolver,
 	userRepo port.UserRepository,
 	taskLog port.TaskLogRepository,
 ) *CreateTaskUseCase {
 	return &CreateTaskUseCase{
-		parser:   parser,
-		board:    board,
-		userRepo: userRepo,
-		taskLog:  taskLog,
+		parser:         parser,
+		board:          board,
+		memberResolver: memberResolver,
+		userRepo:       userRepo,
+		taskLog:        taskLog,
 	}
 }
 
@@ -39,6 +42,9 @@ func (uc *CreateTaskUseCase) Execute(
 	user, err := uc.userRepo.FindByTelegramID(ctx, valueobject.TelegramID(input.TelegramID))
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if !user.HasTrelloToken() {
+		return nil, domainerror.ErrTrelloNotConnected
 	}
 	if !user.HasBoardConfigured() {
 		return nil, domainerror.ErrBoardNotSet
@@ -63,6 +69,16 @@ func (uc *CreateTaskUseCase) Execute(
 		labelIDs = ids
 	}
 
+	// 3b. Resolve member names to Trello member IDs
+	var memberIDs []string
+	if len(task.Members()) > 0 {
+		ids, err := uc.memberResolver.MatchMembers(ctx, user.TrelloToken(), user.DefaultBoard(), task.Members())
+		if err != nil {
+			return nil, fmt.Errorf("match members: %w", err)
+		}
+		memberIDs = ids
+	}
+
 	// 4. Map domain entity to board card params
 	var dueStr *string
 	if task.DueDate() != nil {
@@ -81,6 +97,7 @@ func (uc *CreateTaskUseCase) Execute(
 		Description: task.Description(),
 		DueDate:     dueStr,
 		LabelIDs:    labelIDs,
+		MemberIDs:   memberIDs,
 		Position:    position,
 	}
 
@@ -104,5 +121,6 @@ func (uc *CreateTaskUseCase) Execute(
 		DueDate:   task.DueDate(),
 		Priority:  string(task.Priority()),
 		Labels:    task.Labels(),
+		Members:   task.Members(),
 	}, nil
 }

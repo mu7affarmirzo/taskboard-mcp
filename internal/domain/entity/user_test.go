@@ -25,6 +25,27 @@ func TestNewUser_Defaults(t *testing.T) {
 	if !u.UseLLM() {
 		t.Error("expected UseLLM=true by default")
 	}
+	if u.HasTrelloToken() {
+		t.Error("expected HasTrelloToken=false for new user")
+	}
+}
+
+func TestUser_HasTrelloToken(t *testing.T) {
+	u := NewUser(valueobject.NewTelegramID(1))
+
+	if u.HasTrelloToken() {
+		t.Error("expected HasTrelloToken=false before setting token")
+	}
+
+	u.SetTrelloToken("some-token")
+	if !u.HasTrelloToken() {
+		t.Error("expected HasTrelloToken=true after setting token")
+	}
+
+	u.SetTrelloToken("")
+	if u.HasTrelloToken() {
+		t.Error("expected HasTrelloToken=false after clearing token")
+	}
 }
 
 func TestUser_Setters(t *testing.T) {

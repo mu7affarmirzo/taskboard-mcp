@@ -31,7 +31,8 @@ func TestCreateTask_HappyPath(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(12345)).Return(user, nil)
@@ -70,15 +71,37 @@ func TestCreateTask_HappyPath(t *testing.T) {
 	taskLog.AssertExpectations(t)
 }
 
+func TestCreateTask_TrelloNotConnected(t *testing.T) {
+	parser := new(MockParser)
+	board := new(MockBoard)
+	userRepo := new(MockUserRepo)
+	taskLog := new(MockTaskLog)
+
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
+
+	user := entity.NewUser(valueobject.TelegramID(12345))
+	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
+
+	_, err := uc.Execute(context.Background(), dto.CreateTaskInput{
+		TelegramID: 12345, RawMessage: "Some task",
+	})
+
+	assert.ErrorIs(t, err, domainerror.ErrTrelloNotConnected)
+	parser.AssertNotCalled(t, "Parse")
+}
+
 func TestCreateTask_BoardNotSet(t *testing.T) {
 	parser := new(MockParser)
 	board := new(MockBoard)
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := entity.NewUser(valueobject.TelegramID(12345))
+	user.SetTrelloToken("tok")
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
 
 	_, err := uc.Execute(context.Background(), dto.CreateTaskInput{
@@ -95,9 +118,11 @@ func TestCreateTask_ListNotSet(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := entity.NewUser(valueobject.TelegramID(12345))
+	user.SetTrelloToken("tok")
 	user.SetDefaultBoard("board-1")
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
 
@@ -115,7 +140,8 @@ func TestCreateTask_ParseFails(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
@@ -134,7 +160,8 @@ func TestCreateTask_CreateCardFails(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
@@ -156,7 +183,8 @@ func TestCreateTask_UserNotFound(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(nil, domainerror.ErrUserNotFound)
 
@@ -174,7 +202,8 @@ func TestCreateTask_NormalPriority_BottomPosition(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)

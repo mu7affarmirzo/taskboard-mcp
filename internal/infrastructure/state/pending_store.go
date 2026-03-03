@@ -12,6 +12,7 @@ type PendingTask struct {
 	Priority    string
 	Labels      []string
 	Checklist   []string
+	Members     []string
 	RawMessage  string
 	CreatedAt   time.Time
 }

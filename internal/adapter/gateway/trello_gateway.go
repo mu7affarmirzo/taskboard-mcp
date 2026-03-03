@@ -78,6 +78,42 @@ func (g *TrelloGateway) MatchLabels(ctx context.Context, token string, boardID s
 	return matched, nil
 }
 
+func (g *TrelloGateway) GetMembers(ctx context.Context, token string, boardID string) ([]port.MemberInfo, error) {
+	members, err := g.client.GetMembers(ctx, token, boardID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]port.MemberInfo, len(members))
+	for i, m := range members {
+		result[i] = port.MemberInfo{ID: m.ID, Username: m.Username, FullName: m.FullName}
+	}
+	return result, nil
+}
+
+func (g *TrelloGateway) MatchMembers(ctx context.Context, token string, boardID string, names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	members, err := g.client.GetMembers(ctx, token, boardID)
+	if err != nil {
+		return nil, err
+	}
+	var matched []string
+	for _, name := range names {
+		nameLower := strings.ToLower(name)
+		for _, m := range members {
+			userLower := strings.ToLower(m.Username)
+			fullLower := strings.ToLower(m.FullName)
+			if userLower == nameLower || fullLower == nameLower ||
+				strings.Contains(fullLower, nameLower) || strings.Contains(nameLower, userLower) {
+				matched = append(matched, m.ID)
+				break
+			}
+		}
+	}
+	return matched, nil
+}
+
 func (g *TrelloGateway) CreateCard(ctx context.Context, token string, params port.CreateCardParams) (*port.CardResult, error) {
 	trelloParams := trello.CreateCardRequest{
 		Name:        params.Title,
@@ -90,6 +126,9 @@ func (g *TrelloGateway) CreateCard(ctx context.Context, token string, params por
 	}
 	if len(params.LabelIDs) > 0 {
 		trelloParams.LabelIDs = params.LabelIDs
+	}
+	if len(params.MemberIDs) > 0 {
+		trelloParams.MemberIDs = params.MemberIDs
 	}
 
 	resp, err := g.client.CreateCard(ctx, token, trelloParams)

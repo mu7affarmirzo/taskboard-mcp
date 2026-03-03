@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"telegram-trello-bot/internal/domain/domainerror"
 	"telegram-trello-bot/internal/domain/valueobject"
 	"telegram-trello-bot/internal/usecase/dto"
 	"telegram-trello-bot/internal/usecase/port"
@@ -22,6 +23,9 @@ func (uc *ListBoardsUseCase) Execute(ctx context.Context, telegramID int64) (*dt
 	user, err := uc.userRepo.FindByTelegramID(ctx, valueobject.TelegramID(telegramID))
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if !user.HasTrelloToken() {
+		return nil, domainerror.ErrTrelloNotConnected
 	}
 
 	boards, err := uc.board.GetBoards(ctx, user.TrelloToken())

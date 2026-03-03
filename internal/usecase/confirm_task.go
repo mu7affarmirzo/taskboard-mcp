@@ -11,20 +11,23 @@ import (
 )
 
 type ConfirmTaskUseCase struct {
-	board    port.TaskBoard
-	userRepo port.UserRepository
-	taskLog  port.TaskLogRepository
+	board          port.TaskBoard
+	memberResolver port.MemberResolver
+	userRepo       port.UserRepository
+	taskLog        port.TaskLogRepository
 }
 
 func NewConfirmTaskUseCase(
 	board port.TaskBoard,
+	memberResolver port.MemberResolver,
 	userRepo port.UserRepository,
 	taskLog port.TaskLogRepository,
 ) *ConfirmTaskUseCase {
 	return &ConfirmTaskUseCase{
-		board:    board,
-		userRepo: userRepo,
-		taskLog:  taskLog,
+		board:          board,
+		memberResolver: memberResolver,
+		userRepo:       userRepo,
+		taskLog:        taskLog,
 	}
 }
 
@@ -35,6 +38,9 @@ func (uc *ConfirmTaskUseCase) Execute(
 	user, err := uc.userRepo.FindByTelegramID(ctx, valueobject.TelegramID(input.TelegramID))
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if !user.HasTrelloToken() {
+		return nil, domainerror.ErrTrelloNotConnected
 	}
 	if !user.HasBoardConfigured() {
 		return nil, domainerror.ErrBoardNotSet
@@ -51,6 +57,16 @@ func (uc *ConfirmTaskUseCase) Execute(
 			return nil, fmt.Errorf("match labels: %w", err)
 		}
 		labelIDs = ids
+	}
+
+	// Resolve member names to Trello member IDs
+	var memberIDs []string
+	if len(input.Members) > 0 {
+		ids, err := uc.memberResolver.MatchMembers(ctx, user.TrelloToken(), user.DefaultBoard(), input.Members)
+		if err != nil {
+			return nil, fmt.Errorf("match members: %w", err)
+		}
+		memberIDs = ids
 	}
 
 	// Map to card params
@@ -72,6 +88,7 @@ func (uc *ConfirmTaskUseCase) Execute(
 		Description: input.Description,
 		DueDate:     dueStr,
 		LabelIDs:    labelIDs,
+		MemberIDs:   memberIDs,
 		Position:    position,
 	}
 
@@ -92,5 +109,6 @@ func (uc *ConfirmTaskUseCase) Execute(
 		DueDate:   input.DueDate,
 		Priority:  input.Priority,
 		Labels:    input.Labels,
+		Members:   input.Members,
 	}, nil
 }

@@ -22,7 +22,8 @@ func TestConfirmTask_HappyPath(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(12345)).Return(user, nil)
@@ -57,14 +58,34 @@ func TestConfirmTask_HappyPath(t *testing.T) {
 	taskLog.AssertExpectations(t)
 }
 
+func TestConfirmTask_TrelloNotConnected(t *testing.T) {
+	board := new(MockBoard)
+	userRepo := new(MockUserRepo)
+	taskLog := new(MockTaskLog)
+
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
+
+	user := entity.NewUser(valueobject.TelegramID(12345))
+	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
+
+	_, err := uc.Execute(context.Background(), dto.ConfirmTaskInput{
+		TelegramID: 12345, Title: "task",
+	})
+
+	assert.ErrorIs(t, err, domainerror.ErrTrelloNotConnected)
+}
+
 func TestConfirmTask_BoardNotSet(t *testing.T) {
 	board := new(MockBoard)
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 
 	user := entity.NewUser(valueobject.TelegramID(12345))
+	user.SetTrelloToken("tok")
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
 
 	_, err := uc.Execute(context.Background(), dto.ConfirmTaskInput{
@@ -79,7 +100,8 @@ func TestConfirmTask_CreateCardFails(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)
@@ -97,7 +119,8 @@ func TestConfirmTask_NormalPriority_BottomPosition(t *testing.T) {
 	userRepo := new(MockUserRepo)
 	taskLog := new(MockTaskLog)
 
-	uc := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	memberResolver := new(MockMemberResolver)
+	uc := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 
 	user := newConfiguredUser()
 	userRepo.On("FindByTelegramID", mock.Anything, mock.Anything).Return(user, nil)

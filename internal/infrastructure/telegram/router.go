@@ -47,8 +47,9 @@ func (r *Router) Route(api BotSender, update tgbotapi.Update) {
 
 	if update.Message.IsCommand() {
 		cmd := update.Message.Command()
+		args := update.Message.CommandArguments()
 		log.Debug("command received", "command", cmd)
-		r.handleCommand(ctx, api, chatID, userID, cmd)
+		r.handleCommand(ctx, api, chatID, userID, cmd, args)
 		log.Debug("command handled", "command", cmd, "duration_ms", time.Since(start).Milliseconds())
 		return
 	}
@@ -66,10 +67,25 @@ func (r *Router) Route(api BotSender, update tgbotapi.Update) {
 	log.Debug("task preview sent", "title", output.TaskTitle, "duration_ms", time.Since(start).Milliseconds())
 }
 
-func (r *Router) handleCommand(ctx context.Context, api BotSender, chatID, userID int64, cmd string) {
+func (r *Router) handleCommand(ctx context.Context, api BotSender, chatID, userID int64, cmd string, args string) {
 	switch cmd {
 	case "start":
-		r.sendText(api, chatID, "Welcome! Send /help to get started.")
+		output, err := r.ctrl.HandleStart(ctx, userID)
+		if err != nil {
+			r.sendText(api, chatID, r.presenter.FormatError(err))
+			return
+		}
+		r.sendText(api, chatID, r.presenter.FormatWelcome(output))
+	case "connect":
+		token := strings.TrimSpace(args)
+		output, err := r.ctrl.HandleConnectTrello(ctx, userID, token)
+		if err != nil {
+			r.sendText(api, chatID, r.presenter.FormatError(err))
+			return
+		}
+		if output.Connected {
+			r.sendText(api, chatID, r.presenter.FormatTrelloConnected())
+		}
 	case "help":
 		r.sendText(api, chatID, r.presenter.FormatHelp())
 	case "boards":

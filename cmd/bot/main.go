@@ -60,18 +60,21 @@ func main() {
 	pendingStore := state.NewPendingStore()
 
 	// Use Cases
-	createTaskUC := usecase.NewCreateTaskUseCase(parserChain, trelloGw, userRepo, taskLogRepo)
+	createTaskUC := usecase.NewCreateTaskUseCase(parserChain, trelloGw, trelloGw, userRepo, taskLogRepo)
 	parseTaskUC := usecase.NewParseTaskUseCase(parserChain, userRepo)
-	confirmTaskUC := usecase.NewConfirmTaskUseCase(trelloGw, userRepo, taskLogRepo)
+	confirmTaskUC := usecase.NewConfirmTaskUseCase(trelloGw, trelloGw, userRepo, taskLogRepo)
 	listBoardsUC := usecase.NewListBoardsUseCase(trelloGw, userRepo)
 	listListsUC := usecase.NewListListsUseCase(trelloGw, userRepo)
 	selectBoardUC := usecase.NewSelectBoardUseCase(userRepo)
 	selectListUC := usecase.NewSelectListUseCase(userRepo)
+	registerUserUC := usecase.NewRegisterUserUseCase(userRepo, cfg.TrelloAPIKey)
+	connectTrelloUC := usecase.NewConnectTrelloUseCase(userRepo)
 
 	// Adapters
 	ctrl := controller.NewTelegramController(
 		createTaskUC, parseTaskUC, confirmTaskUC,
 		listBoardsUC, listListsUC, selectBoardUC, selectListUC,
+		registerUserUC, connectTrelloUC,
 		pendingStore,
 	)
 	pres := presenter.NewTelegramPresenter()

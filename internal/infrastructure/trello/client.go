@@ -70,6 +70,16 @@ func (c *Client) GetLabels(ctx context.Context, token string, boardID string) ([
 	return labels, nil
 }
 
+func (c *Client) GetMembers(ctx context.Context, token string, boardID string) ([]MemberResponse, error) {
+	endpoint := fmt.Sprintf("%s/1/boards/%s/members?key=%s&token=%s&fields=id,username,fullName",
+		c.baseURL, boardID, c.apiKey, token)
+	var members []MemberResponse
+	if err := c.doGet(ctx, endpoint, &members); err != nil {
+		return nil, fmt.Errorf("get members: %w", err)
+	}
+	return members, nil
+}
+
 func (c *Client) CreateCard(ctx context.Context, token string, req CreateCardRequest) (*CardResponse, error) {
 	body := url.Values{}
 	body.Set("key", c.apiKey)
@@ -82,6 +92,9 @@ func (c *Client) CreateCard(ctx context.Context, token string, req CreateCardReq
 	}
 	if len(req.LabelIDs) > 0 {
 		body.Set("idLabels", strings.Join(req.LabelIDs, ","))
+	}
+	if len(req.MemberIDs) > 0 {
+		body.Set("idMembers", strings.Join(req.MemberIDs, ","))
 	}
 	if req.Position != "" {
 		body.Set("pos", req.Position)

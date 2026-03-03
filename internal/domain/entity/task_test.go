@@ -41,12 +41,16 @@ func TestNewTask_ValidTitle(t *testing.T) {
 	if len(task.Checklist()) != 0 {
 		t.Errorf("expected no checklist, got %v", task.Checklist())
 	}
+	if len(task.Members()) != 0 {
+		t.Errorf("expected no members, got %v", task.Members())
+	}
 }
 
 func TestNewTask_WithOptions(t *testing.T) {
 	due := time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)
 	labels := []string{"urgent", "work"}
 	checklist := []string{"step 1", "step 2"}
+	members := []string{"john", "jane"}
 
 	task, err := NewTask("Deploy app",
 		WithDescription("Deploy to production"),
@@ -54,6 +58,7 @@ func TestNewTask_WithOptions(t *testing.T) {
 		WithPriority(valueobject.PriorityHigh),
 		WithLabels(labels),
 		WithChecklist(checklist),
+		WithMembers(members),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,6 +80,9 @@ func TestNewTask_WithOptions(t *testing.T) {
 	}
 	if len(task.Checklist()) != 2 || task.Checklist()[0] != "step 1" {
 		t.Errorf("expected checklist [step 1, step 2], got %v", task.Checklist())
+	}
+	if len(task.Members()) != 2 || task.Members()[0] != "john" {
+		t.Errorf("expected members [john jane], got %v", task.Members())
 	}
 }
 

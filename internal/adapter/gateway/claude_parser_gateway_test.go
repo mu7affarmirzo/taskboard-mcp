@@ -137,6 +137,21 @@ func TestClaudeParser_InvalidDate_Ignored(t *testing.T) {
 	assert.Nil(t, task.DueDate()) // invalid date gracefully ignored
 }
 
+func TestClaudeParser_WithMembers(t *testing.T) {
+	sender := new(mockMessageSender)
+	parser := gateway.NewClaudeParserGateway(sender)
+
+	response := `{"title":"Fix bug","members":["john","jane"]}`
+	sender.On("SendMessage", mock.Anything, mock.Anything, "Fix bug @john @jane").Return(response, nil)
+
+	task, err := parser.Parse(context.Background(), "Fix bug @john @jane")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Fix bug", task.Title())
+	assert.Equal(t, []string{"john", "jane"}, task.Members())
+	sender.AssertExpectations(t)
+}
+
 func TestClaudeParser_PromptContainsDate(t *testing.T) {
 	sender := new(mockMessageSender)
 	parser := gateway.NewClaudeParserGateway(sender)

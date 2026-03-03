@@ -85,24 +85,44 @@ func (m *mockTaskLog) Log(ctx context.Context, entry port.TaskLogEntry) error {
 	return m.Called(ctx, entry).Error(0)
 }
 
+type mockMemberResolver struct{ mock.Mock }
+
+func (m *mockMemberResolver) GetMembers(ctx context.Context, token, boardID string) ([]port.MemberInfo, error) {
+	args := m.Called(ctx, token, boardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.MemberInfo), args.Error(1)
+}
+func (m *mockMemberResolver) MatchMembers(ctx context.Context, token, boardID string, names []string) ([]string, error) {
+	args := m.Called(ctx, token, boardID, names)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 // -- Helpers --
 
 func setupController() (*controller.TelegramController, *mockParser, *mockBoard, *mockUserRepo, *mockTaskLog) {
 	parser := new(mockParser)
 	board := new(mockBoard)
+	memberResolver := new(mockMemberResolver)
 	userRepo := new(mockUserRepo)
 	taskLog := new(mockTaskLog)
 	pending := state.NewPendingStore()
 
-	createTask := usecase.NewCreateTaskUseCase(parser, board, userRepo, taskLog)
+	createTask := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
 	parseTask := usecase.NewParseTaskUseCase(parser, userRepo)
-	confirmTask := usecase.NewConfirmTaskUseCase(board, userRepo, taskLog)
+	confirmTask := usecase.NewConfirmTaskUseCase(board, memberResolver, userRepo, taskLog)
 	listBoards := usecase.NewListBoardsUseCase(board, userRepo)
 	listLists := usecase.NewListListsUseCase(board, userRepo)
 	selectBoard := usecase.NewSelectBoardUseCase(userRepo)
 	selectList := usecase.NewSelectListUseCase(userRepo)
+	registerUser := usecase.NewRegisterUserUseCase(userRepo, "test-api-key")
+	connectTrello := usecase.NewConnectTrelloUseCase(userRepo)
 
-	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, pending)
+	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending)
 	return ctrl, parser, board, userRepo, taskLog
 }
 

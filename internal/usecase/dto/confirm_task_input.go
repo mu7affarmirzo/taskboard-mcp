@@ -9,4 +9,5 @@ type ConfirmTaskInput struct {
 	DueDate     *time.Time
 	Priority    string
 	Labels      []string
+	Members     []string
 }

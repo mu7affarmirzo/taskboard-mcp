@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   bot:
     build:
@@ -6,7 +5,9 @@ services:
       dockerfile: deployments/Dockerfile
     container_name: telegram-trello-bot
     restart: unless-stopped
-    env_file: ../.env
+    env_file:
+      - path: ../.env
+        required: false
     ports:
       - "${PORT:-8080}:8080"
     volumes:
