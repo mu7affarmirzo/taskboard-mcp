@@ -91,6 +91,9 @@ func main() {
 
 	// Delivery
 	router := telegram.NewRouter(ctrl, pres, logger)
+	if cfg.MiniAppEnabled && cfg.MiniAppURL != "" {
+		router.SetMiniAppURL(cfg.MiniAppURL)
+	}
 	bot, err := telegram.NewBot(cfg.TelegramToken, router, logger)
 	if err != nil {
 		logger.Error("failed to create bot", "error", err)

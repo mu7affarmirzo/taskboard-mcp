@@ -19,13 +19,18 @@ type BotSender interface {
 }
 
 type Router struct {
-	ctrl      *controller.TelegramController
-	presenter *presenter.TelegramPresenter
-	logger    *slog.Logger
+	ctrl       *controller.TelegramController
+	presenter  *presenter.TelegramPresenter
+	logger     *slog.Logger
+	miniAppURL string
 }
 
 func NewRouter(ctrl *controller.TelegramController, pres *presenter.TelegramPresenter, logger *slog.Logger) *Router {
 	return &Router{ctrl: ctrl, presenter: pres, logger: logger}
+}
+
+func (r *Router) SetMiniAppURL(url string) {
+	r.miniAppURL = url
 }
 
 func (r *Router) Route(api BotSender, update tgbotapi.Update) {
@@ -89,7 +94,7 @@ func (r *Router) handleCommand(ctx context.Context, api BotSender, chatID, userI
 			r.sendText(api, chatID, r.presenter.FormatError(err))
 			return
 		}
-		r.sendText(api, chatID, r.presenter.FormatWelcome(output))
+		r.sendTextWithReplyKeyboard(api, chatID, r.presenter.FormatWelcome(output), BuildMainMenuKeyboard())
 	case "connect":
 		token := strings.TrimSpace(args)
 		output, err := r.ctrl.HandleConnectTrello(ctx, userID, token)
@@ -102,6 +107,18 @@ func (r *Router) handleCommand(ctx context.Context, api BotSender, chatID, userI
 		}
 	case "help":
 		r.sendText(api, chatID, r.presenter.FormatHelp())
+	case "app":
+		if r.miniAppURL == "" {
+			r.sendText(api, chatID, "Mini App is not configured.")
+			return
+		}
+		kb := BuildWebAppKeyboard("Open Mini App", r.miniAppURL)
+		msg := tgbotapi.NewMessage(chatID, "Tap the button below to open the dashboard:")
+		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = kb
+		if _, err := api.Send(msg); err != nil {
+			r.logger.Error("failed to send mini app button", "error", err, "chat_id", chatID)
+		}
 	case "boards":
 		output, err := r.ctrl.HandleListBoards(ctx, userID)
 		if err != nil {
@@ -190,6 +207,15 @@ func (r *Router) sendText(api BotSender, chatID int64, text string) {
 	msg.ParseMode = "Markdown"
 	if _, err := api.Send(msg); err != nil {
 		r.logger.Error("failed to send message", "error", err, "chat_id", chatID)
+	}
+}
+
+func (r *Router) sendTextWithReplyKeyboard(api BotSender, chatID int64, text string, keyboard tgbotapi.ReplyKeyboardMarkup) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = keyboard
+	if _, err := api.Send(msg); err != nil {
+		r.logger.Error("failed to send message with reply keyboard", "error", err, "chat_id", chatID)
 	}
 }
 

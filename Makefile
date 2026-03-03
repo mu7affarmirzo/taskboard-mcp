@@ -121,7 +121,7 @@ stop:
 web-install:
 	cd web && npm ci
 
-web-build:
+web-build: web-install
 	cd web && npm run build
 
 web-dev:

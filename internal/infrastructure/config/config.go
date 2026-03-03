@@ -17,6 +17,7 @@ type Config struct {
 	Port               string
 	LogLevel           string
 	MiniAppEnabled     bool
+	MiniAppURL         string
 	JWTSecret          string
 }
 
@@ -37,6 +38,7 @@ func Load() *Config {
 		Port:               viper.GetString("PORT"),
 		LogLevel:           viper.GetString("LOG_LEVEL"),
 		MiniAppEnabled:     viper.GetBool("MINIAPP_ENABLED"),
+		MiniAppURL:         viper.GetString("MINIAPP_URL"),
 		JWTSecret:          viper.GetString("JWT_SECRET"),
 	}
 }

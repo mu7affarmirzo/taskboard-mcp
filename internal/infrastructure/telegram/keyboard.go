@@ -26,6 +26,53 @@ func BuildListKeyboard(lists []port.ListInfo) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
+// webAppButton is a custom InlineKeyboardButton with web_app support.
+// The go-telegram-bot-api v5.5.1 SDK does not include the web_app field,
+// so we define our own type that serializes the field correctly.
+type webAppButton struct {
+	Text   string      `json:"text"`
+	WebApp *webAppInfo `json:"web_app"`
+}
+
+type webAppInfo struct {
+	URL string `json:"url"`
+}
+
+// webAppKeyboard wraps buttons that include web_app into a format
+// compatible with tgbotapi.InlineKeyboardMarkup JSON serialization.
+type webAppKeyboard struct {
+	InlineKeyboard [][]webAppButton `json:"inline_keyboard"`
+}
+
+// BuildWebAppKeyboard creates an inline keyboard with a single WebApp button
+// that opens inside Telegram rather than in an external browser.
+func BuildWebAppKeyboard(text, url string) webAppKeyboard {
+	return webAppKeyboard{
+		InlineKeyboard: [][]webAppButton{
+			{
+				{
+					Text:   text,
+					WebApp: &webAppInfo{URL: url},
+				},
+			},
+		},
+	}
+}
+
+// BuildMainMenuKeyboard creates a persistent reply keyboard with the main bot commands.
+func BuildMainMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
+	return tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("/boards"),
+			tgbotapi.NewKeyboardButton("/app"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("/help"),
+			tgbotapi.NewKeyboardButton("/start"),
+		),
+	)
+}
+
 func BuildConfirmKeyboard() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

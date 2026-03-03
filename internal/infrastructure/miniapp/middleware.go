@@ -35,7 +35,11 @@ func CORSMiddleware(next http.Handler) http.Handler {
 func AuthMiddleware(session port.SessionManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip auth for POST /api/auth
+			// Skip auth for non-API paths (static files, SPA) and POST /api/auth
+			if !strings.HasPrefix(r.URL.Path, "/api/") {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if r.Method == http.MethodPost && r.URL.Path == "/api/auth" {
 				next.ServeHTTP(w, r)
 				return
@@ -67,7 +71,10 @@ func AuthMiddleware(session port.SessionManager) func(http.Handler) http.Handler
 
 func JSONMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		// Only set JSON content type for API paths
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Content-Type", "application/json")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
