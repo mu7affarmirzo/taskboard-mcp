@@ -56,6 +56,20 @@ type CardDetailResponse struct {
 	URL      string           `json:"url"`
 	IDList   string           `json:"idList"`
 	Due      string           `json:"due"`
+	Closed   bool             `json:"closed"`
 	Labels   []LabelResponse  `json:"labels"`
 	Members  []MemberResponse `json:"members"`
+}
+
+type CommentResponse struct {
+	ID   string            `json:"id"`
+	Data CommentDataResponse `json:"data"`
+}
+
+type CommentDataResponse struct {
+	Text string `json:"text"`
+}
+
+type SearchResponse struct {
+	Cards []CardDetailResponse `json:"cards"`
 }

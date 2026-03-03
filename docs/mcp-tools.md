@@ -213,14 +213,243 @@ List all labels on the configured Trello board.
 
 ---
 
+## create_list
+
+Create a new list on the configured Trello board.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `name` | string | Yes | List name |
+
+**Returns:** `list_id`, `name`
+
+**Example prompts:**
+- "Create a Trello list called Sprint 5"
+- "Add a new Testing list to the board"
+
+**Example response:**
+```json
+{
+  "list_id": "6921c5dff222e50109e635a1",
+  "name": "Sprint 5"
+}
+```
+
+---
+
+## archive_card
+
+Archive a Trello card (soft delete — card can be restored from the archive).
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+
+**Returns:** `card_id`, `status`
+
+**Example prompts:**
+- "Archive the Trello card we just finished"
+- "Archive card 69a66e50"
+
+**Example response:**
+```json
+{
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "status": "archived"
+}
+```
+
+---
+
+## delete_card
+
+Permanently delete a Trello card. This cannot be undone.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+
+**Returns:** `card_id`, `status`
+
+**Example prompts:**
+- "Delete the test card we created"
+- "Permanently remove card 69a66e50"
+
+**Example response:**
+```json
+{
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "status": "deleted"
+}
+```
+
+---
+
+## add_comment
+
+Add a comment to a Trello card. Useful for logging progress, deployment notes, or status updates.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+| `text` | string | Yes | Comment text |
+
+**Returns:** `comment_id`, `card_id`, `text`
+
+**Example prompts:**
+- "Add a comment to card 69a66e50: deployed to staging"
+- "Comment on the card: PR #42 merged"
+- "Log a note on the card: waiting for design review"
+
+**Example response:**
+```json
+{
+  "comment_id": "69b12345abcdef",
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "text": "deployed to staging"
+}
+```
+
+---
+
+## assign_card
+
+Assign members to a Trello card by username or full name. Replaces the current member list.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+| `member_names` | string | Yes | Comma-separated member usernames or full names |
+
+**Returns:** `card_id`, `assigned_count`, `member_ids`
+
+**Example prompts:**
+- "Assign john to card 69a66e50"
+- "Assign john, jane to the card"
+- "Assign me to this Trello card"
+
+**Example response:**
+```json
+{
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "assigned_count": 2,
+  "member_ids": ["m1", "m2"]
+}
+```
+
+---
+
+## search_cards
+
+Search for cards on the board by keyword. Returns up to 20 matching cards.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `query` | string | Yes | Search query |
+
+**Returns:** Array of `{ card_id, title, card_url, list_id }`
+
+**Example prompts:**
+- "Search Trello for cards about payment"
+- "Find all cards mentioning authentication"
+- "Search the board for bug fixes"
+
+**Example response:**
+```json
+[
+  {
+    "card_id": "c1",
+    "title": "Payment integration",
+    "card_url": "https://trello.com/c/abc",
+    "list_id": "list-1"
+  }
+]
+```
+
+---
+
+## add_label
+
+Add a label to a Trello card by label name. Preserves existing labels.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+| `label_name` | string | Yes | Label name (case-insensitive) |
+
+**Returns:** `card_id`, `label_name`, `label_id`, `status`
+
+**Example prompts:**
+- "Add the Bug label to card 69a66e50"
+- "Label this card as Feature"
+- "Tag the card with Urgent"
+
+**Example response:**
+```json
+{
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "label_name": "Bug",
+  "label_id": "lb2",
+  "status": "added"
+}
+```
+
+---
+
+## set_due_date
+
+Set or clear the due date on a Trello card.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `card_id` | string | Yes | Trello card ID |
+| `due_date` | string | No | Due date in `YYYY-MM-DD` format. Omit or leave empty to clear the due date |
+
+**Returns:** `card_id`, `status`
+
+**Example prompts:**
+- "Set the due date on card 69a66e50 to March 15th"
+- "Clear the due date on this card"
+- "This card is due next Friday"
+
+**Example response:**
+```json
+{
+  "card_id": "69a66e50e444ce8a5a00aef3",
+  "status": "set to 2026-03-15"
+}
+```
+
+---
+
 ## Typical Workflow
 
 A common development workflow using these tools:
 
 1. **Start a task** — "Create a Trello card called 'Add payment integration' in bot | Tasks"
-2. **Track progress** — "Update the card description with: implemented Stripe webhook handler"
-3. **Change status** — "Move the card to Customer | Tasks"
-4. **Check board** — "List all cards in bot | Tasks"
+2. **Add labels** — "Add the Feature label to the card"
+3. **Assign team** — "Assign john to the card"
+4. **Track progress** — "Add a comment: implemented Stripe webhook handler"
+5. **Change status** — "Move the card to Customer | Tasks"
+6. **Check board** — "List all cards in bot | Tasks"
+7. **Search** — "Search Trello for payment cards"
+8. **Clean up** — "Archive the card we just finished"
 
 ## Error Handling
 
@@ -231,5 +460,8 @@ All tools return errors as structured MCP error results. Common errors:
 | `list "X" not found on board` | The list name doesn't match any list on the board |
 | `no list specified and TRELLO_LIST_ID not configured` | `create_card` called without `list_name` and no default list set |
 | `no fields to update` | `update_card` called without any optional fields |
+| `label "X" not found on board` | The label name doesn't match any label on the board |
+| `label already assigned to card` | The label is already on the card |
+| `no matching members found` | No board members matched the given names |
 | `create card failed: trello API returned status 401` | Invalid API key or token |
 | `context deadline exceeded` | Trello API didn't respond within 30 seconds |

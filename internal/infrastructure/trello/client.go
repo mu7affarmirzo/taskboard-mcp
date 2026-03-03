@@ -174,6 +174,97 @@ func (c *Client) GetCards(ctx context.Context, token string, listID string) ([]C
 	return cards, nil
 }
 
+func (c *Client) CreateList(ctx context.Context, token string, boardID string, name string) (*ListResponse, error) {
+	body := url.Values{}
+	body.Set("key", c.apiKey)
+	body.Set("token", token)
+	body.Set("name", name)
+	body.Set("idBoard", boardID)
+
+	var list ListResponse
+	if err := c.doPost(ctx, c.baseURL+"/1/lists", body, &list); err != nil {
+		return nil, fmt.Errorf("create list: %w", err)
+	}
+	return &list, nil
+}
+
+func (c *Client) ArchiveCard(ctx context.Context, token string, cardID string) error {
+	body := url.Values{}
+	body.Set("key", c.apiKey)
+	body.Set("token", token)
+	body.Set("closed", "true")
+
+	var card CardDetailResponse
+	if err := c.doPut(ctx, fmt.Sprintf("%s/1/cards/%s", c.baseURL, cardID), body, &card); err != nil {
+		return fmt.Errorf("archive card: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) DeleteCard(ctx context.Context, token string, cardID string) error {
+	endpoint := fmt.Sprintf("%s/1/cards/%s?key=%s&token=%s", c.baseURL, cardID, c.apiKey, token)
+	if err := c.doDelete(ctx, endpoint); err != nil {
+		return fmt.Errorf("delete card: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) AddComment(ctx context.Context, token string, cardID string, text string) (*CommentResponse, error) {
+	body := url.Values{}
+	body.Set("key", c.apiKey)
+	body.Set("token", token)
+	body.Set("text", text)
+
+	var comment CommentResponse
+	if err := c.doPost(ctx, fmt.Sprintf("%s/1/cards/%s/actions/comments", c.baseURL, cardID), body, &comment); err != nil {
+		return nil, fmt.Errorf("add comment: %w", err)
+	}
+	return &comment, nil
+}
+
+func (c *Client) SearchCards(ctx context.Context, token string, boardID string, query string) ([]CardDetailResponse, error) {
+	endpoint := fmt.Sprintf("%s/1/search?key=%s&token=%s&query=%s&idBoards=%s&modelTypes=cards&cards_limit=20&card_fields=id,name,desc,shortUrl,url,idList,due,closed",
+		c.baseURL, c.apiKey, token, url.QueryEscape(query), boardID)
+	var result SearchResponse
+	if err := c.doGet(ctx, endpoint, &result); err != nil {
+		return nil, fmt.Errorf("search cards: %w", err)
+	}
+	return result.Cards, nil
+}
+
+func (c *Client) doPost(ctx context.Context, rawURL string, body url.Values, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", rawURL, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+func (c *Client) doDelete(ctx context.Context, rawURL string) error {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", rawURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (c *Client) doPut(ctx context.Context, rawURL string, body url.Values, target interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, "PUT", rawURL, strings.NewReader(body.Encode()))
 	if err != nil {

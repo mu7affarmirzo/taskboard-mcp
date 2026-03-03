@@ -339,6 +339,333 @@ func TestListLabels_APIError(t *testing.T) {
 	assert.True(t, result.IsError)
 }
 
+func TestCreateList_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/1/lists" {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "Sprint 5", r.FormValue("name"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.ListResponse{
+				ID: "list-new", Name: "Sprint 5",
+			}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleCreateList, map[string]any{"name": "Sprint 5"})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "Sprint 5")
+	assert.Contains(t, text, "list-new")
+}
+
+func TestCreateList_MissingName(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleCreateList, map[string]any{})
+	assert.True(t, result.IsError)
+}
+
+func TestArchiveCard_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/1/cards/c1" {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "true", r.FormValue("closed"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1", Closed: true}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleArchiveCard, map[string]any{"card_id": "c1"})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "archived")
+}
+
+func TestArchiveCard_APIError(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleArchiveCard, map[string]any{"card_id": "bad"})
+	assert.True(t, result.IsError)
+}
+
+func TestDeleteCard_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/1/cards/c1" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleDeleteCard, map[string]any{"card_id": "c1"})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "deleted")
+}
+
+func TestDeleteCard_APIError(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleDeleteCard, map[string]any{"card_id": "bad"})
+	assert.True(t, result.IsError)
+}
+
+func TestAddComment_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/1/cards/c1/actions/comments" {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "Deployed to staging", r.FormValue("text"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CommentResponse{
+				ID:   "comment-1",
+				Data: trello.CommentDataResponse{Text: "Deployed to staging"},
+			}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAddComment, map[string]any{
+		"card_id": "c1",
+		"text":    "Deployed to staging",
+	})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "Deployed to staging")
+	assert.Contains(t, text, "comment-1")
+}
+
+func TestAddComment_MissingText(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAddComment, map[string]any{"card_id": "c1"})
+	assert.True(t, result.IsError)
+}
+
+func TestAssignCard_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/1/boards/board-1/members":
+			require.NoError(t, json.NewEncoder(w).Encode([]trello.MemberResponse{
+				{ID: "m1", Username: "john", FullName: "John Doe"},
+				{ID: "m2", Username: "jane", FullName: "Jane Smith"},
+			}))
+		case r.Method == "PUT" && r.URL.Path == "/1/cards/c1":
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "m1", r.FormValue("idMembers"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1"}))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAssignCard, map[string]any{
+		"card_id":      "c1",
+		"member_names": "john",
+	})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "m1")
+}
+
+func TestAssignCard_NoMatch(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1/boards/board-1/members" {
+			require.NoError(t, json.NewEncoder(w).Encode([]trello.MemberResponse{
+				{ID: "m1", Username: "john", FullName: "John Doe"},
+			}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAssignCard, map[string]any{
+		"card_id":      "c1",
+		"member_names": "nonexistent",
+	})
+	assert.True(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "no matching members")
+}
+
+func TestSearchCards_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1/search" {
+			require.NoError(t, json.NewEncoder(w).Encode(trello.SearchResponse{
+				Cards: []trello.CardDetailResponse{
+					{ID: "c1", Name: "Payment integration", ShortURL: "https://trello.com/c/1"},
+					{ID: "c2", Name: "Payment bug", ShortURL: "https://trello.com/c/2"},
+				},
+			}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleSearchCards, map[string]any{"query": "payment"})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "Payment integration")
+	assert.Contains(t, text, "Payment bug")
+}
+
+func TestSearchCards_NoResults(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1/search" {
+			require.NoError(t, json.NewEncoder(w).Encode(trello.SearchResponse{Cards: []trello.CardDetailResponse{}}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleSearchCards, map[string]any{"query": "nonexistent"})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "[]")
+}
+
+func TestAddLabel_HappyPath(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/1/cards/c1":
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{
+				ID:     "c1",
+				Labels: []trello.LabelResponse{{ID: "lb1", Name: "Feature"}},
+			}))
+		case r.URL.Path == "/1/boards/board-1/labels":
+			require.NoError(t, json.NewEncoder(w).Encode([]trello.LabelResponse{
+				{ID: "lb1", Name: "Feature", Color: "green"},
+				{ID: "lb2", Name: "Bug", Color: "red"},
+			}))
+		case r.Method == "PUT" && r.URL.Path == "/1/cards/c1":
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "lb1,lb2", r.FormValue("idLabels"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1"}))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAddLabel, map[string]any{
+		"card_id":    "c1",
+		"label_name": "Bug",
+	})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "added")
+	assert.Contains(t, text, "lb2")
+}
+
+func TestAddLabel_NotFound(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/1/cards/c1":
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1"}))
+		case r.URL.Path == "/1/boards/board-1/labels":
+			require.NoError(t, json.NewEncoder(w).Encode([]trello.LabelResponse{
+				{ID: "lb1", Name: "Bug", Color: "red"},
+			}))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAddLabel, map[string]any{
+		"card_id":    "c1",
+		"label_name": "Nonexistent",
+	})
+	assert.True(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "not found")
+}
+
+func TestAddLabel_AlreadyAssigned(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/1/cards/c1":
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{
+				ID:     "c1",
+				Labels: []trello.LabelResponse{{ID: "lb1", Name: "Bug"}},
+			}))
+		case r.URL.Path == "/1/boards/board-1/labels":
+			require.NoError(t, json.NewEncoder(w).Encode([]trello.LabelResponse{
+				{ID: "lb1", Name: "Bug", Color: "red"},
+			}))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleAddLabel, map[string]any{
+		"card_id":    "c1",
+		"label_name": "Bug",
+	})
+	assert.True(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "already assigned")
+}
+
+func TestSetDueDate_Set(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/1/cards/c1" {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "2026-03-15", r.FormValue("due"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1"}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleSetDueDate, map[string]any{
+		"card_id":  "c1",
+		"due_date": "2026-03-15",
+	})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "2026-03-15")
+}
+
+func TestSetDueDate_Clear(t *testing.T) {
+	s, ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/1/cards/c1" {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "null", r.FormValue("due"))
+			require.NoError(t, json.NewEncoder(w).Encode(trello.CardDetailResponse{ID: "c1"}))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	result := callTool(t, s, s.handleSetDueDate, map[string]any{
+		"card_id": "c1",
+	})
+	assert.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.Contains(t, text, "cleared")
+}
+
 func TestToolRegistration(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer ts.Close()

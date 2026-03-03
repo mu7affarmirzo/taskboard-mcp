@@ -357,3 +357,150 @@ func TestClient_GetCards_EmptyList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cards)
 }
+
+func TestClient_CreateList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/lists")
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "Sprint 5", r.FormValue("name"))
+		assert.Equal(t, "board-1", r.FormValue("idBoard"))
+		require.NoError(t, json.NewEncoder(w).Encode(ListResponse{ID: "list-new", Name: "Sprint 5"}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	list, err := client.CreateList(context.Background(), "token", "board-1", "Sprint 5")
+	require.NoError(t, err)
+	assert.Equal(t, "list-new", list.ID)
+	assert.Equal(t, "Sprint 5", list.Name)
+}
+
+func TestClient_CreateList_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	_, err := client.CreateList(context.Background(), "token", "board-1", "Fail")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "create list")
+}
+
+func TestClient_ArchiveCard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "PUT", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/cards/c1")
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "true", r.FormValue("closed"))
+		require.NoError(t, json.NewEncoder(w).Encode(CardDetailResponse{ID: "c1", Closed: true}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	err := client.ArchiveCard(context.Background(), "token", "c1")
+	require.NoError(t, err)
+}
+
+func TestClient_ArchiveCard_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	err := client.ArchiveCard(context.Background(), "token", "bad-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "archive card")
+}
+
+func TestClient_DeleteCard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "DELETE", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/cards/c1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	err := client.DeleteCard(context.Background(), "token", "c1")
+	require.NoError(t, err)
+}
+
+func TestClient_DeleteCard_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	err := client.DeleteCard(context.Background(), "token", "bad-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "delete card")
+}
+
+func TestClient_AddComment(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/cards/c1/actions/comments")
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "Deployed to staging", r.FormValue("text"))
+		require.NoError(t, json.NewEncoder(w).Encode(CommentResponse{
+			ID:   "comment-1",
+			Data: CommentDataResponse{Text: "Deployed to staging"},
+		}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	comment, err := client.AddComment(context.Background(), "token", "c1", "Deployed to staging")
+	require.NoError(t, err)
+	assert.Equal(t, "comment-1", comment.ID)
+	assert.Equal(t, "Deployed to staging", comment.Data.Text)
+}
+
+func TestClient_AddComment_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	_, err := client.AddComment(context.Background(), "token", "c1", "fail")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "add comment")
+}
+
+func TestClient_SearchCards(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/1/search")
+		assert.Contains(t, r.URL.RawQuery, "query=payment")
+		require.NoError(t, json.NewEncoder(w).Encode(SearchResponse{
+			Cards: []CardDetailResponse{
+				{ID: "c1", Name: "Payment integration"},
+				{ID: "c2", Name: "Payment bug fix"},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	cards, err := client.SearchCards(context.Background(), "token", "board-1", "payment")
+	require.NoError(t, err)
+	assert.Len(t, cards, 2)
+	assert.Equal(t, "Payment integration", cards[0].Name)
+}
+
+func TestClient_SearchCards_NoResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(SearchResponse{Cards: []CardDetailResponse{}}))
+	}))
+	defer server.Close()
+
+	client := NewClientWithURL(server.URL, "key", nil)
+	cards, err := client.SearchCards(context.Background(), "token", "board-1", "nonexistent")
+	require.NoError(t, err)
+	assert.Empty(t, cards)
+}
