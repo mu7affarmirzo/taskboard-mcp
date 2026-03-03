@@ -25,6 +25,7 @@ import (
 	"telegram-trello-bot/internal/infrastructure/state"
 	infratelegram "telegram-trello-bot/internal/infrastructure/telegram"
 	"telegram-trello-bot/internal/usecase"
+	"telegram-trello-bot/internal/usecase/dto"
 	"telegram-trello-bot/internal/usecase/port"
 )
 
@@ -76,6 +77,27 @@ func (m *mockBoard) CreateCard(ctx context.Context, token string, p port.CreateC
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*port.CardResult), args.Error(1)
+}
+func (m *mockBoard) SearchCards(ctx context.Context, token, boardID, query string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, boardID, query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) GetCards(ctx context.Context, token, listID string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, listID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) CreateList(ctx context.Context, token, boardID, name string) (*port.ListInfo, error) {
+	args := m.Called(ctx, token, boardID, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.ListInfo), args.Error(1)
 }
 
 type mockUserRepo struct{ mock.Mock }
@@ -283,13 +305,47 @@ func BenchmarkPendingStore_SetGet_Parallel(b *testing.B) {
 
 // ── Router Throughput Tests ──────────────────────────────────
 
-func newLoadRouter(t *testing.T) (*infratelegram.Router, *noopSender, *mockParser, *mockBoard, *mockUserRepo, *mockTaskLog) {
+type mockIntentParser struct{ mock.Mock }
+
+func (m *mockIntentParser) ParseIntent(ctx context.Context, rawMessage string) (*dto.IntentOutput, error) {
+	args := m.Called(ctx, rawMessage)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*dto.IntentOutput), args.Error(1)
+}
+
+type mockCardManager struct{ mock.Mock }
+
+func (m *mockCardManager) GetCard(ctx context.Context, token, cardID string) (*port.CardInfo, error) {
+	args := m.Called(ctx, token, cardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.CardInfo), args.Error(1)
+}
+func (m *mockCardManager) UpdateCard(ctx context.Context, token, cardID string, params port.UpdateCardParams) error {
+	return m.Called(ctx, token, cardID, params).Error(0)
+}
+func (m *mockCardManager) ArchiveCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) DeleteCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) AddComment(ctx context.Context, token, cardID, text string) error {
+	return m.Called(ctx, token, cardID, text).Error(0)
+}
+
+func newLoadRouter(t *testing.T) (*infratelegram.Router, *noopSender, *mockIntentParser, *mockBoard, *mockUserRepo, *mockTaskLog) {
 	t.Helper()
 
 	parser := new(mockParser)
 	board := new(mockBoard)
 	userRepo := new(mockUserRepo)
 	taskLog := new(mockTaskLog)
+	intentParser := new(mockIntentParser)
+	cardManager := new(mockCardManager)
 	pending := state.NewPendingStore()
 
 	memberResolver := new(mockMemberResolver)
@@ -303,13 +359,16 @@ func newLoadRouter(t *testing.T) (*infratelegram.Router, *noopSender, *mockParse
 	registerUser := usecase.NewRegisterUserUseCase(userRepo, "test-api-key")
 	connectTrello := usecase.NewConnectTrelloUseCase(userRepo)
 
-	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending)
+	parseIntentUC := usecase.NewParseIntentUseCase(intentParser, userRepo)
+	executeActionUC := usecase.NewExecuteActionUseCase(board, cardManager, memberResolver, userRepo, taskLog)
+
+	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending, parseIntentUC, executeActionUC)
 	pres := presenter.NewTelegramPresenter()
 	logger := slog.Default()
 	router := infratelegram.NewRouter(ctrl, pres, logger)
 	sender := &noopSender{}
 
-	return router, sender, parser, board, userRepo, taskLog
+	return router, sender, intentParser, board, userRepo, taskLog
 }
 
 func TestRouter_Throughput_Commands(t *testing.T) {
@@ -360,8 +419,10 @@ func TestRouter_Throughput_ParseFlow(t *testing.T) {
 	const flowsPerGoroutine = 100
 
 	// Set up mocks for all users
-	task, _ := entity.NewTask("Load test task")
-	parser.On("Parse", mock.Anything, mock.Anything).Return(task, nil)
+	parser.On("ParseIntent", mock.Anything, mock.Anything).Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Load test task",
+	}, nil)
 
 	for g := 0; g < goroutines; g++ {
 		userID := int64(g + 1)

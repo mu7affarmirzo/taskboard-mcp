@@ -13,6 +13,7 @@ import (
 	"telegram-trello-bot/internal/domain/valueobject"
 	"telegram-trello-bot/internal/infrastructure/state"
 	"telegram-trello-bot/internal/usecase"
+	"telegram-trello-bot/internal/usecase/dto"
 	"telegram-trello-bot/internal/usecase/port"
 )
 
@@ -65,6 +66,27 @@ func (m *mockBoard) CreateCard(ctx context.Context, token string, p port.CreateC
 	}
 	return args.Get(0).(*port.CardResult), args.Error(1)
 }
+func (m *mockBoard) SearchCards(ctx context.Context, token, boardID, query string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, boardID, query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) GetCards(ctx context.Context, token, listID string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, listID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) CreateList(ctx context.Context, token, boardID, name string) (*port.ListInfo, error) {
+	args := m.Called(ctx, token, boardID, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.ListInfo), args.Error(1)
+}
 
 type mockUserRepo struct{ mock.Mock }
 
@@ -102,6 +124,38 @@ func (m *mockMemberResolver) MatchMembers(ctx context.Context, token, boardID st
 	return args.Get(0).([]string), args.Error(1)
 }
 
+type mockIntentParser struct{ mock.Mock }
+
+func (m *mockIntentParser) ParseIntent(ctx context.Context, rawMessage string) (*dto.IntentOutput, error) {
+	args := m.Called(ctx, rawMessage)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*dto.IntentOutput), args.Error(1)
+}
+
+type mockCardManager struct{ mock.Mock }
+
+func (m *mockCardManager) GetCard(ctx context.Context, token, cardID string) (*port.CardInfo, error) {
+	args := m.Called(ctx, token, cardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.CardInfo), args.Error(1)
+}
+func (m *mockCardManager) UpdateCard(ctx context.Context, token, cardID string, params port.UpdateCardParams) error {
+	return m.Called(ctx, token, cardID, params).Error(0)
+}
+func (m *mockCardManager) ArchiveCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) DeleteCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) AddComment(ctx context.Context, token, cardID, text string) error {
+	return m.Called(ctx, token, cardID, text).Error(0)
+}
+
 // -- Helpers --
 
 func setupController() (*controller.TelegramController, *mockParser, *mockBoard, *mockUserRepo, *mockTaskLog) {
@@ -110,6 +164,8 @@ func setupController() (*controller.TelegramController, *mockParser, *mockBoard,
 	memberResolver := new(mockMemberResolver)
 	userRepo := new(mockUserRepo)
 	taskLog := new(mockTaskLog)
+	intentParser := new(mockIntentParser)
+	cardManager := new(mockCardManager)
 	pending := state.NewPendingStore()
 
 	createTask := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
@@ -122,7 +178,10 @@ func setupController() (*controller.TelegramController, *mockParser, *mockBoard,
 	registerUser := usecase.NewRegisterUserUseCase(userRepo, "test-api-key")
 	connectTrello := usecase.NewConnectTrelloUseCase(userRepo)
 
-	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending)
+	parseIntentUC := usecase.NewParseIntentUseCase(intentParser, userRepo)
+	executeActionUC := usecase.NewExecuteActionUseCase(board, cardManager, memberResolver, userRepo, taskLog)
+
+	ctrl := controller.NewTelegramController(createTask, parseTask, confirmTask, listBoards, listLists, selectBoard, selectList, registerUser, connectTrello, pending, parseIntentUC, executeActionUC)
 	return ctrl, parser, board, userRepo, taskLog
 }
 

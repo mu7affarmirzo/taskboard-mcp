@@ -19,9 +19,10 @@ func TestTrelloGateway_ImplementsTaskBoard(t *testing.T) {
 	client := trello.NewClient("test-key", nil)
 	gw := gateway.NewTrelloGateway(client)
 
-	// Compile-time check: TrelloGateway satisfies port.TaskBoard and port.MemberResolver
+	// Compile-time check: TrelloGateway satisfies port.TaskBoard, port.MemberResolver, port.CardManager
 	var _ port.TaskBoard = gw
 	var _ port.MemberResolver = gw
+	var _ port.CardManager = gw
 }
 
 func TestTrelloGateway_MatchLabels_ExactMatch(t *testing.T) {

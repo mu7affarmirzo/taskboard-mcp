@@ -56,6 +56,9 @@ func main() {
 	ruleParser := gateway.NewRuleParserGateway()
 	parserChain := gateway.NewParserChainGateway(llmParser, ruleParser, logger)
 
+	intentParser := gateway.NewClaudeIntentGateway(claudeClient)
+	intentChain := gateway.NewIntentChainGateway(intentParser, parserChain, logger)
+
 	// State
 	pendingStore := state.NewPendingStore()
 
@@ -70,12 +73,16 @@ func main() {
 	registerUserUC := usecase.NewRegisterUserUseCase(userRepo, cfg.TrelloAPIKey)
 	connectTrelloUC := usecase.NewConnectTrelloUseCase(userRepo)
 
+	parseIntentUC := usecase.NewParseIntentUseCase(intentChain, userRepo)
+	executeActionUC := usecase.NewExecuteActionUseCase(trelloGw, trelloGw, trelloGw, userRepo, taskLogRepo)
+
 	// Adapters
 	ctrl := controller.NewTelegramController(
 		createTaskUC, parseTaskUC, confirmTaskUC,
 		listBoardsUC, listListsUC, selectBoardUC, selectListUC,
 		registerUserUC, connectTrelloUC,
 		pendingStore,
+		parseIntentUC, executeActionUC,
 	)
 	pres := presenter.NewTelegramPresenter()
 

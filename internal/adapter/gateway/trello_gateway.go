@@ -137,3 +137,96 @@ func (g *TrelloGateway) CreateCard(ctx context.Context, token string, params por
 	}
 	return &port.CardResult{CardID: resp.ID, CardURL: resp.ShortURL}, nil
 }
+
+func (g *TrelloGateway) SearchCards(ctx context.Context, token string, boardID string, query string) ([]port.CardResult, error) {
+	cards, err := g.client.SearchCards(ctx, token, boardID, query)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]port.CardResult, len(cards))
+	for i, c := range cards {
+		result[i] = port.CardResult{
+			CardID:  c.ID,
+			CardURL: c.ShortURL,
+			Title:   c.Name,
+			ListID:  c.IDList,
+		}
+	}
+	return result, nil
+}
+
+func (g *TrelloGateway) GetCards(ctx context.Context, token string, listID string) ([]port.CardResult, error) {
+	cards, err := g.client.GetCards(ctx, token, listID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]port.CardResult, len(cards))
+	for i, c := range cards {
+		result[i] = port.CardResult{
+			CardID:  c.ID,
+			CardURL: c.ShortURL,
+			Title:   c.Name,
+			ListID:  c.IDList,
+		}
+	}
+	return result, nil
+}
+
+func (g *TrelloGateway) CreateList(ctx context.Context, token string, boardID string, name string) (*port.ListInfo, error) {
+	list, err := g.client.CreateList(ctx, token, boardID, name)
+	if err != nil {
+		return nil, err
+	}
+	return &port.ListInfo{ID: list.ID, Name: list.Name}, nil
+}
+
+func (g *TrelloGateway) GetCard(ctx context.Context, token string, cardID string) (*port.CardInfo, error) {
+	card, err := g.client.GetCard(ctx, token, cardID)
+	if err != nil {
+		return nil, err
+	}
+	labels := make([]string, len(card.Labels))
+	for i, l := range card.Labels {
+		labels[i] = l.ID
+	}
+	members := make([]string, len(card.Members))
+	for i, m := range card.Members {
+		members[i] = m.ID
+	}
+	return &port.CardInfo{
+		ID:          card.ID,
+		Title:       card.Name,
+		Description: card.Desc,
+		URL:         card.ShortURL,
+		ListID:      card.IDList,
+		Due:         card.Due,
+		Labels:      labels,
+		Members:     members,
+	}, nil
+}
+
+func (g *TrelloGateway) UpdateCard(ctx context.Context, token string, cardID string, params port.UpdateCardParams) error {
+	req := trello.UpdateCardRequest{
+		Name:      params.Name,
+		Desc:      params.Desc,
+		IDList:    params.IDList,
+		Due:       params.Due,
+		IDLabels:  params.IDLabels,
+		IDMembers: params.IDMembers,
+	}
+	_, err := g.client.UpdateCard(ctx, token, cardID, req)
+	return err
+}
+
+func (g *TrelloGateway) ArchiveCard(ctx context.Context, token string, cardID string) error {
+	return g.client.ArchiveCard(ctx, token, cardID)
+}
+
+func (g *TrelloGateway) DeleteCard(ctx context.Context, token string, cardID string) error {
+	return g.client.DeleteCard(ctx, token, cardID)
+}
+
+func (g *TrelloGateway) AddComment(ctx context.Context, token string, cardID string, text string) error {
+	_, err := g.client.AddComment(ctx, token, cardID, text)
+	return err
+}

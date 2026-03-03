@@ -20,6 +20,8 @@ type TelegramController struct {
 	registerUser  *usecase.RegisterUserUseCase
 	connectTrello *usecase.ConnectTrelloUseCase
 	pending       *state.PendingStore
+	parseIntent   *usecase.ParseIntentUseCase
+	executeAction *usecase.ExecuteActionUseCase
 }
 
 func NewTelegramController(
@@ -33,6 +35,8 @@ func NewTelegramController(
 	registerUser *usecase.RegisterUserUseCase,
 	connectTrello *usecase.ConnectTrelloUseCase,
 	pending *state.PendingStore,
+	parseIntent *usecase.ParseIntentUseCase,
+	executeAction *usecase.ExecuteActionUseCase,
 ) *TelegramController {
 	return &TelegramController{
 		createTask:    createTask,
@@ -45,6 +49,8 @@ func NewTelegramController(
 		registerUser:  registerUser,
 		connectTrello: connectTrello,
 		pending:       pending,
+		parseIntent:   parseIntent,
+		executeAction: executeAction,
 	}
 }
 
@@ -78,6 +84,29 @@ func (c *TelegramController) HandleParseTask(ctx context.Context, telegramID int
 	})
 
 	return output, nil
+}
+
+func (c *TelegramController) HandleIntent(ctx context.Context, telegramID int64, text string) (*dto.IntentOutput, error) {
+	return c.parseIntent.Execute(ctx, dto.IntentInput{
+		TelegramID: telegramID,
+		RawMessage: text,
+	})
+}
+
+func (c *TelegramController) HandleExecuteAction(ctx context.Context, telegramID int64, intent *dto.IntentOutput) (*dto.ActionOutput, error) {
+	return c.executeAction.Execute(ctx, telegramID, intent)
+}
+
+func (c *TelegramController) StorePendingFromIntent(telegramID int64, intent *dto.IntentOutput) {
+	c.pending.Set(telegramID, state.PendingTask{
+		Title:       intent.Title,
+		Description: intent.Description,
+		DueDate:     intent.DueDate,
+		Priority:    intent.Priority,
+		Labels:      intent.Labels,
+		Checklist:   intent.Checklist,
+		Members:     intent.Members,
+	})
 }
 
 func (c *TelegramController) HandleConfirmTask(ctx context.Context, telegramID int64) (*dto.CreateTaskOutput, error) {

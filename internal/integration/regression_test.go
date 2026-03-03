@@ -22,6 +22,7 @@ import (
 	infratelegram "telegram-trello-bot/internal/infrastructure/telegram"
 	"telegram-trello-bot/internal/infrastructure/state"
 	"telegram-trello-bot/internal/usecase"
+	"telegram-trello-bot/internal/usecase/dto"
 	"telegram-trello-bot/internal/usecase/port"
 )
 
@@ -73,6 +74,27 @@ func (m *mockBoard) CreateCard(ctx context.Context, token string, p port.CreateC
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*port.CardResult), args.Error(1)
+}
+func (m *mockBoard) SearchCards(ctx context.Context, token, boardID, query string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, boardID, query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) GetCards(ctx context.Context, token, listID string) ([]port.CardResult, error) {
+	args := m.Called(ctx, token, listID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]port.CardResult), args.Error(1)
+}
+func (m *mockBoard) CreateList(ctx context.Context, token, boardID, name string) (*port.ListInfo, error) {
+	args := m.Called(ctx, token, boardID, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.ListInfo), args.Error(1)
 }
 
 type mockUserRepo struct{ mock.Mock }
@@ -169,15 +191,48 @@ func (s *recordingSender) all() []sentMessage {
 	return cp
 }
 
+type mockIntentParser struct{ mock.Mock }
+
+func (m *mockIntentParser) ParseIntent(ctx context.Context, rawMessage string) (*dto.IntentOutput, error) {
+	args := m.Called(ctx, rawMessage)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*dto.IntentOutput), args.Error(1)
+}
+
+type mockCardManager struct{ mock.Mock }
+
+func (m *mockCardManager) GetCard(ctx context.Context, token, cardID string) (*port.CardInfo, error) {
+	args := m.Called(ctx, token, cardID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*port.CardInfo), args.Error(1)
+}
+func (m *mockCardManager) UpdateCard(ctx context.Context, token, cardID string, params port.UpdateCardParams) error {
+	return m.Called(ctx, token, cardID, params).Error(0)
+}
+func (m *mockCardManager) ArchiveCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) DeleteCard(ctx context.Context, token, cardID string) error {
+	return m.Called(ctx, token, cardID).Error(0)
+}
+func (m *mockCardManager) AddComment(ctx context.Context, token, cardID, text string) error {
+	return m.Called(ctx, token, cardID, text).Error(0)
+}
+
 // ── Fixture ─────────────────────────────────────────────────
 
 type fixture struct {
-	router   *infratelegram.Router
-	sender   *recordingSender
-	parser   *mockParser
-	board    *mockBoard
-	userRepo *mockUserRepo
-	taskLog  *mockTaskLog
+	router       *infratelegram.Router
+	sender       *recordingSender
+	parser       *mockParser
+	board        *mockBoard
+	userRepo     *mockUserRepo
+	taskLog      *mockTaskLog
+	intentParser *mockIntentParser
 }
 
 func newFixture() *fixture {
@@ -186,6 +241,8 @@ func newFixture() *fixture {
 	memberResolver := new(mockMemberResolver)
 	userRepo := new(mockUserRepo)
 	taskLog := new(mockTaskLog)
+	intentParser := new(mockIntentParser)
+	cardManager := new(mockCardManager)
 	pending := state.NewPendingStore()
 
 	createTask := usecase.NewCreateTaskUseCase(parser, board, memberResolver, userRepo, taskLog)
@@ -198,11 +255,15 @@ func newFixture() *fixture {
 	registerUser := usecase.NewRegisterUserUseCase(userRepo, "test-api-key")
 	connectTrello := usecase.NewConnectTrelloUseCase(userRepo)
 
+	parseIntentUC := usecase.NewParseIntentUseCase(intentParser, userRepo)
+	executeActionUC := usecase.NewExecuteActionUseCase(board, cardManager, memberResolver, userRepo, taskLog)
+
 	ctrl := controller.NewTelegramController(
 		createTask, parseTask, confirmTask,
 		listBoards, listLists, selectBoard, selectList,
 		registerUser, connectTrello,
 		pending,
+		parseIntentUC, executeActionUC,
 	)
 	pres := presenter.NewTelegramPresenter()
 	logger := slog.Default()
@@ -214,6 +275,7 @@ func newFixture() *fixture {
 		router: router, sender: sender,
 		parser: parser, board: board,
 		userRepo: userRepo, taskLog: taskLog,
+		intentParser: intentParser,
 	}
 }
 
@@ -270,8 +332,11 @@ func TestFullFlow_ParsePreviewConfirmCreate(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task, _ := entity.NewTask("Buy groceries", entity.WithPriority(valueobject.PriorityHigh))
-	f.parser.On("Parse", mock.Anything, "Buy groceries urgent").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Buy groceries urgent").Return(&dto.IntentOutput{
+		Action:   "create_task",
+		Title:    "Buy groceries",
+		Priority: "high",
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, "trello-tok", "board-1", mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, "trello-tok", mock.Anything).
 		Return(&port.CardResult{CardID: "c1", CardURL: "https://trello.com/c/abc"}, nil)
@@ -305,8 +370,10 @@ func TestFullFlow_ParsePreviewCancel(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task, _ := entity.NewTask("Cancelled task")
-	f.parser.On("Parse", mock.Anything, "Cancelled task").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Cancelled task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Cancelled task",
+	}, nil)
 
 	// Step 1: Send message → preview
 	f.router.Route(f.sender, makeMessage(100, 200, "Cancelled task"))
@@ -332,11 +399,15 @@ func TestFullFlow_ParsePreviewEdit(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task1, _ := entity.NewTask("Original task")
-	f.parser.On("Parse", mock.Anything, "Original task").Return(task1, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Original task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Original task",
+	}, nil)
 
-	task2, _ := entity.NewTask("Edited task")
-	f.parser.On("Parse", mock.Anything, "Edited task").Return(task2, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Edited task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Edited task",
+	}, nil)
 
 	f.board.On("MatchLabels", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, "trello-tok", mock.Anything).
@@ -455,7 +526,7 @@ func TestRegression_ParserFailure(t *testing.T) {
 	f := newFixture()
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
-	f.parser.On("Parse", mock.Anything, "???").Return(nil, errors.New("cannot parse"))
+	f.intentParser.On("ParseIntent", mock.Anything, "???").Return(nil, errors.New("cannot parse"))
 
 	f.router.Route(f.sender, makeMessage(100, 200, "???"))
 
@@ -469,8 +540,10 @@ func TestRegression_TrelloAPIFailure_OnConfirm(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task, _ := entity.NewTask("Important task")
-	f.parser.On("Parse", mock.Anything, "Important task").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Important task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Important task",
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("trello 500: internal server error"))
@@ -500,8 +573,10 @@ func TestRegression_DoubleConfirmSameTask(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task, _ := entity.NewTask("One-time task")
-	f.parser.On("Parse", mock.Anything, "One-time task").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "One-time task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "One-time task",
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, "trello-tok", mock.Anything).
 		Return(&port.CardResult{CardID: "c1", CardURL: "url"}, nil)
@@ -577,12 +652,13 @@ func TestRegression_TaskWithLabelsAndDueDate(t *testing.T) {
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
 	due := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
-	task, _ := entity.NewTask("Deploy v2",
-		entity.WithPriority(valueobject.PriorityHigh),
-		entity.WithDueDate(due),
-		entity.WithLabels([]string{"backend", "urgent"}),
-	)
-	f.parser.On("Parse", mock.Anything, "Deploy v2 by June 15 #backend #urgent").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Deploy v2 by June 15 #backend #urgent").Return(&dto.IntentOutput{
+		Action:   "create_task",
+		Title:    "Deploy v2",
+		Priority: "high",
+		DueDate:  &due,
+		Labels:   []string{"backend", "urgent"},
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, "trello-tok", "board-1", []string{"backend", "urgent"}).
 		Return([]string{"lbl-1", "lbl-2"}, nil)
 	f.board.On("CreateCard", mock.Anything, "trello-tok", mock.MatchedBy(func(p port.CreateCardParams) bool {
@@ -611,10 +687,11 @@ func TestRegression_TaskWithChecklist(t *testing.T) {
 	user := configuredUser(100)
 	f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(100)).Return(user, nil)
 
-	task, _ := entity.NewTask("Release prep",
-		entity.WithChecklist([]string{"run tests", "update changelog", "tag release"}),
-	)
-	f.parser.On("Parse", mock.Anything, "Release prep with steps").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Release prep with steps").Return(&dto.IntentOutput{
+		Action:    "create_task",
+		Title:     "Release prep",
+		Checklist: []string{"run tests", "update changelog", "tag release"},
+	}, nil)
 
 	f.router.Route(f.sender, makeMessage(100, 200, "Release prep with steps"))
 	preview := f.sender.last().text
@@ -637,8 +714,10 @@ func TestRegression_ConcurrentUsers_IndependentFlows(t *testing.T) {
 		user := configuredUser(i)
 		f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(i)).Return(user, nil)
 	}
-	task, _ := entity.NewTask("Task from user")
-	f.parser.On("Parse", mock.Anything, "Task from user").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Task from user").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Task from user",
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, mock.Anything, mock.Anything).
 		Return(&port.CardResult{CardID: "c1", CardURL: "url"}, nil)
@@ -676,8 +755,10 @@ func TestRegression_ConcurrentUsers_ParseAndCancelMixed(t *testing.T) {
 		user := configuredUser(i)
 		f.userRepo.On("FindByTelegramID", mock.Anything, valueobject.TelegramID(i)).Return(user, nil)
 	}
-	task, _ := entity.NewTask("Task")
-	f.parser.On("Parse", mock.Anything, "Task").Return(task, nil)
+	f.intentParser.On("ParseIntent", mock.Anything, "Task").Return(&dto.IntentOutput{
+		Action: "create_task",
+		Title:  "Task",
+	}, nil)
 	f.board.On("MatchLabels", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{}, nil)
 	f.board.On("CreateCard", mock.Anything, mock.Anything, mock.Anything).
 		Return(&port.CardResult{CardID: "c1", CardURL: "url"}, nil)

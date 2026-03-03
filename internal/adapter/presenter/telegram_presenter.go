@@ -54,6 +54,112 @@ func (p *TelegramPresenter) FormatTaskPreview(output *dto.ParseTaskOutput) strin
 	return sb.String()
 }
 
+func (p *TelegramPresenter) FormatIntentPreview(output *dto.IntentOutput) string {
+	var sb strings.Builder
+	sb.WriteString("*Create this task?*\n\n")
+	sb.WriteString(fmt.Sprintf("*Title:* %s\n", output.Title))
+	if output.Priority != "" {
+		sb.WriteString(fmt.Sprintf("*Priority:* %s\n", output.Priority))
+	}
+	if output.Description != "" {
+		sb.WriteString(fmt.Sprintf("*Description:* %s\n", output.Description))
+	}
+	if output.DueDate != nil {
+		sb.WriteString(fmt.Sprintf("*Due:* %s\n", output.DueDate.Format("Jan 2, 2006")))
+	}
+	if len(output.Labels) > 0 {
+		sb.WriteString(fmt.Sprintf("*Labels:* %s\n", strings.Join(output.Labels, ", ")))
+	}
+	if len(output.Members) > 0 {
+		sb.WriteString(fmt.Sprintf("*Assigned to:* %s\n", strings.Join(output.Members, ", ")))
+	}
+	if len(output.Checklist) > 0 {
+		sb.WriteString("*Checklist:*\n")
+		for _, item := range output.Checklist {
+			sb.WriteString(fmt.Sprintf("  - %s\n", item))
+		}
+	}
+	return sb.String()
+}
+
+func (p *TelegramPresenter) FormatActionResult(output *dto.ActionOutput) string {
+	switch output.Action {
+	case "get_card":
+		return p.FormatCardDetails(output)
+	case "list_cards", "search_cards":
+		return p.FormatCardList(output)
+	case "list_lists":
+		return p.FormatListOfLists(output)
+	case "list_labels":
+		return p.FormatLabelList(output)
+	default:
+		return p.formatGenericResult(output)
+	}
+}
+
+func (p *TelegramPresenter) formatGenericResult(output *dto.ActionOutput) string {
+	msg := output.Message
+	if output.CardURL != "" {
+		msg += "\n" + output.CardURL
+	}
+	return msg
+}
+
+func (p *TelegramPresenter) FormatCardDetails(output *dto.ActionOutput) string {
+	if len(output.Items) == 0 {
+		return output.Message
+	}
+	item := output.Items[0]
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("*%s*\n", item.Name))
+	if item.Extra != "" {
+		sb.WriteString(fmt.Sprintf("\n%s\n", item.Extra))
+	}
+	if item.URL != "" {
+		sb.WriteString(fmt.Sprintf("\n%s", item.URL))
+	}
+	return sb.String()
+}
+
+func (p *TelegramPresenter) FormatCardList(output *dto.ActionOutput) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("*%s*\n\n", output.Message))
+	if len(output.Items) == 0 {
+		sb.WriteString("No cards found.")
+		return sb.String()
+	}
+	for i, item := range output.Items {
+		sb.WriteString(fmt.Sprintf("%d. %s", i+1, item.Name))
+		if item.URL != "" {
+			sb.WriteString(fmt.Sprintf(" - [link](%s)", item.URL))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func (p *TelegramPresenter) FormatListOfLists(output *dto.ActionOutput) string {
+	var sb strings.Builder
+	sb.WriteString("*Board Lists:*\n\n")
+	for i, item := range output.Items {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, item.Name))
+	}
+	return sb.String()
+}
+
+func (p *TelegramPresenter) FormatLabelList(output *dto.ActionOutput) string {
+	var sb strings.Builder
+	sb.WriteString("*Board Labels:*\n\n")
+	for _, item := range output.Items {
+		if item.Extra != "" {
+			sb.WriteString(fmt.Sprintf("- %s (%s)\n", item.Name, item.Extra))
+		} else {
+			sb.WriteString(fmt.Sprintf("- %s\n", item.Name))
+		}
+	}
+	return sb.String()
+}
+
 func (p *TelegramPresenter) FormatBoardList(output *dto.ListBoardsOutput) string {
 	var sb strings.Builder
 	sb.WriteString("*Your Trello Boards:*\n\n")
@@ -98,13 +204,28 @@ func (p *TelegramPresenter) FormatTrelloConnected() string {
 func (p *TelegramPresenter) FormatHelp() string {
 	return `*Telegram -> Trello Bot*
 
-Just send me any message and I'll create a Trello card!
+Send me any message and I'll figure out what you want to do!
 
-*Tips:*
-- Include "urgent" or "high priority" to mark as important
-- Add "#label" to tag your task
-- Use "@username" to assign board members
-- Say "due Friday" or "by March 15" to set a deadline
+*Create tasks:*
+- "create a task: implement user auth, due Friday"
+- "add task: fix login bug, high priority"
+
+*Manage cards:*
+- "move the login card to Done"
+- "archive the old task"
+- "delete the test card"
+- "add a comment to payment card: API keys updated"
+
+*Search & browse:*
+- "what cards are in Testing?"
+- "search for auth"
+- "what lists are on the board?"
+- "show labels"
+
+*Assign & update:*
+- "assign john to the auth card"
+- "set due date on login card to Friday"
+- "add label Bug to payment card"
 
 *Commands:*
 /start - Register and get Trello authorization link

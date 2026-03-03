@@ -54,17 +54,31 @@ func (r *Router) Route(api BotSender, update tgbotapi.Update) {
 		return
 	}
 
-	// Two-step flow: parse → preview → confirm
 	log.Debug("message received", "text_length", len(update.Message.Text))
-	output, err := r.ctrl.HandleParseTask(ctx, userID, update.Message.Text)
+
+	intent, err := r.ctrl.HandleIntent(ctx, userID, update.Message.Text)
 	if err != nil {
-		log.Error("parse task failed", "error", err)
+		log.Error("parse intent failed", "error", err)
 		r.sendText(api, chatID, r.presenter.FormatError(err))
 		return
 	}
-	kb := BuildConfirmKeyboard()
-	r.sendTextWithKeyboard(api, chatID, r.presenter.FormatTaskPreview(output), kb)
-	log.Debug("task preview sent", "title", output.TaskTitle, "duration_ms", time.Since(start).Milliseconds())
+
+	if intent.Action == "create_task" {
+		r.ctrl.StorePendingFromIntent(userID, intent)
+		kb := BuildConfirmKeyboard()
+		r.sendTextWithKeyboard(api, chatID, r.presenter.FormatIntentPreview(intent), kb)
+		log.Debug("task preview sent", "title", intent.Title, "duration_ms", time.Since(start).Milliseconds())
+		return
+	}
+
+	result, err := r.ctrl.HandleExecuteAction(ctx, userID, intent)
+	if err != nil {
+		log.Error("execute action failed", "action", intent.Action, "error", err)
+		r.sendText(api, chatID, r.presenter.FormatError(err))
+		return
+	}
+	r.sendText(api, chatID, r.presenter.FormatActionResult(result))
+	log.Debug("action executed", "action", intent.Action, "duration_ms", time.Since(start).Milliseconds())
 }
 
 func (r *Router) handleCommand(ctx context.Context, api BotSender, chatID, userID int64, cmd string, args string) {

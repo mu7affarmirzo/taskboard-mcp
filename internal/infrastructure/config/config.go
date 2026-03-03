@@ -16,6 +16,8 @@ type Config struct {
 	DatabasePath       string
 	Port               string
 	LogLevel           string
+	MiniAppEnabled     bool
+	JWTSecret          string
 }
 
 func Load() *Config {
@@ -34,5 +36,7 @@ func Load() *Config {
 		DatabasePath:       viper.GetString("DATABASE_PATH"),
 		Port:               viper.GetString("PORT"),
 		LogLevel:           viper.GetString("LOG_LEVEL"),
+		MiniAppEnabled:     viper.GetBool("MINIAPP_ENABLED"),
+		JWTSecret:          viper.GetString("JWT_SECRET"),
 	}
 }
